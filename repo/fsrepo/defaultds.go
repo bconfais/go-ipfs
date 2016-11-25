@@ -8,8 +8,8 @@ import (
 	config "github.com/ipfs/go-ipfs/repo/config"
 	"github.com/ipfs/go-ipfs/thirdparty/dir"
 	"gx/ipfs/QmU4VzzKNLJXJ72SedXBQKyf5Jo8W89iWpbWQjHn9qef8N/go-ds-flatfs"
-	levelds "gx/ipfs/QmUHmMGmcwCrjHQHcYhBnqGCSWs5pBSMbGZmfwavETR1gg/go-ds-leveldb"
-	ldbopts "gx/ipfs/QmbBhyDKsY4mbY6xsKt3qu9Y7FPvMJ6qbD8AMjYYvPRw1g/goleveldb/leveldb/opt"
+//	levelds "gx/ipfs/QmUHmMGmcwCrjHQHcYhBnqGCSWs5pBSMbGZmfwavETR1gg/go-ds-leveldb"
+//	ldbopts "gx/ipfs/QmbBhyDKsY4mbY6xsKt3qu9Y7FPvMJ6qbD8AMjYYvPRw1g/goleveldb/leveldb/opt"
 	ds "gx/ipfs/QmbzuUusHqaLLoNTDEVLcSF6vZDHZDLPC7p4bztRvvkXxU/go-datastore"
 	mount "gx/ipfs/QmbzuUusHqaLLoNTDEVLcSF6vZDHZDLPC7p4bztRvvkXxU/go-datastore/syncmount"
 	"gx/ipfs/QmeqtHtxGfcsfXiou7wqHJARWPKUTUcPdtSfSYYHp48dtQ/go-ds-measure"
@@ -21,17 +21,23 @@ const (
 )
 
 func openDefaultDatastore(r *FSRepo) (repo.Datastore, error) {
+	syncfs := !r.config.Datastore.NoSync
 	leveldbPath := path.Join(r.path, leveldbDirectory)
 
 	// save leveldb reference so it can be neatly closed afterward
+	leveldbDS, err := flatfs.New(leveldbPath, 5, syncfs)
+	if err != nil {
+		return nil, fmt.Errorf("unable to open flatfs datastore: %v", err)
+	}
+/*
 	leveldbDS, err := levelds.NewDatastore(leveldbPath, &levelds.Options{
 		Compression: ldbopts.NoCompression,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to open leveldb datastore: %v", err)
 	}
+*/
 
-	syncfs := !r.config.Datastore.NoSync
 	// 5 bytes of prefix gives us 25 bits of freedom, 16 of which are taken by
 	// by the Qm prefix. Leaving us with 9 bits, or 512 way sharding
 	blocksDS, err := flatfs.New(path.Join(r.path, flatfsDirectory), 5, syncfs)
@@ -51,6 +57,7 @@ func openDefaultDatastore(r *FSRepo) (repo.Datastore, error) {
 	prefix := "fsrepo." + id + ".datastore."
 	metricsBlocks := measure.New(prefix+"blocks", blocksDS)
 	metricsLevelDB := measure.New(prefix+"leveldb", leveldbDS)
+
 	mountDS := mount.New([]mount.Mount{
 		{
 			Prefix:    ds.NewKey("/blocks"),

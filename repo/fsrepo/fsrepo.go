@@ -120,10 +120,12 @@ func open(repoPath string) (repo.Repo, error) {
 		return nil, err
 	}
 
-	r.lockfile, err = lockfile.Lock(r.path)
+	/* r.lockfile, err = lockfile.Lock(r.path)
 	if err != nil {
 		return nil, err
 	}
+	*/
+/*
 	keepLocked := false
 	defer func() {
 		// unlock on error, leave it locked on success
@@ -131,6 +133,7 @@ func open(repoPath string) (repo.Repo, error) {
 			r.lockfile.Close()
 		}
 	}()
+*/
 
 	// Check version, and error out if not matching
 	ver, err := mfsr.RepoPath(r.path).Version()
@@ -161,7 +164,7 @@ func open(repoPath string) (repo.Repo, error) {
 		return nil, err
 	}
 
-	keepLocked = true
+//	keepLocked = true
 	return r, nil
 }
 
@@ -262,6 +265,8 @@ func Init(repoPath string, conf *config.Config) error {
 // LockedByOtherProcess returns true if the FSRepo is locked by another
 // process. If true, then the repo cannot be opened by this process.
 func LockedByOtherProcess(repoPath string) (bool, error) {
+	/* added */
+	return false, nil
 	repoPath = filepath.Clean(repoPath)
 	locked, err := lockfile.Locked(repoPath)
 	if locked {
@@ -359,6 +364,7 @@ func (r *FSRepo) openDatastore() error {
 
 // Close closes the FSRepo, releasing held resources.
 func (r *FSRepo) Close() error {
+	return nil
 	packageLock.Lock()
 	defer packageLock.Unlock()
 
@@ -371,9 +377,11 @@ func (r *FSRepo) Close() error {
 		log.Warning("error removing api file: ", err)
 	}
 
+/*
 	if err := r.ds.Close(); err != nil {
 		return err
 	}
+*/
 
 	// This code existed in the previous versions, but
 	// EventlogComponent.Close was never called. Preserving here
@@ -384,9 +392,11 @@ func (r *FSRepo) Close() error {
 	// logging.Configure(logging.Output(os.Stderr))
 
 	r.closed = true
+/*
 	if err := r.lockfile.Close(); err != nil {
 		return err
 	}
+*/
 	return nil
 }
 

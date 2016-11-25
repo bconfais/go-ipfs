@@ -167,7 +167,7 @@ func (bsnet *impl) handleNewStream(s inet.Stream) {
 		return
 	}
 
-	reader := ggio.NewDelimitedReader(s, inet.MessageSizeMax)
+	reader := ggio.NewDelimitedReader(s, inet.MessageSizeMax*5)
 	for {
 		received, err := bsmsg.FromPBReader(reader)
 		if err != nil {
