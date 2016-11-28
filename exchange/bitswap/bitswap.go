@@ -301,7 +301,7 @@ func (bs *Bitswap) HasBlock(blk blocks.Block) error {
 	err := bs.blockstore.Put(blk)
 	if err != nil {
 		log.Errorf("Error writing block to datastore: %s", err)
-		return err
+//		return err
 	}
 
 	// NOTE: There exists the possiblity for a race condition here.  If a user
