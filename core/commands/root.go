@@ -35,6 +35,7 @@ DATA STRUCTURE COMMANDS
   block         Interact with raw blocks in the datastore
   object        Interact with raw dag nodes
   files         Interact with objects as if they were a unix filesystem
+  dag           Interact with IPLD documents (experimental)
 
 ADVANCED COMMANDS
   daemon        Start a long-running daemon process
@@ -44,6 +45,7 @@ ADVANCED COMMANDS
   dns           Resolve DNS links
   pin           Pin objects to local storage
   repo          Manipulate the IPFS repository
+  stats         Various operational stats
 
 NETWORK COMMANDS
   id            Show info about IPFS peers
@@ -68,7 +70,7 @@ at ~/.ipfs. To change the repo location, set the $IPFS_PATH environment variable
 
 EXIT STATUS
 
-The CLI will exits with one of the following values:
+The CLI will exit with one of the following values:
 
 0     Successful execution.
 1     Failed executions.
