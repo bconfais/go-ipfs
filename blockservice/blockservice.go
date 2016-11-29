@@ -144,9 +144,11 @@ func (s *blockService) GetBlock(ctx context.Context, c *cid.Cid) (blocks.Block, 
 
 	block, err := s.blockstore.Get(c)
 	if err == nil {
+		log.Debugf("blockstore key FOUND")
 		return block, nil
 	}
 
+	log.Debugf("blockstore key NOT FOUND")
 	if err == blockstore.ErrNotFound && s.exchange != nil {
 		// TODO be careful checking ErrNotFound. If the underlying
 		// implementation changes, this will break.

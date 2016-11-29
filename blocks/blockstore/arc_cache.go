@@ -84,9 +84,11 @@ func (b *arccache) Get(k *cid.Cid) (blocks.Block, error) {
 		return nil, ErrNotFound
 	}
 
+/*
 	if has, ok := b.hasCached(k); ok && !has {
 		return nil, ErrNotFound
 	}
+*/
 
 	bl, err := b.blockstore.Get(k)
 	if bl == nil && err == ErrNotFound {
