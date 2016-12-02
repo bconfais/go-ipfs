@@ -21,7 +21,7 @@ const (
 )
 
 func openDefaultDatastore(r *FSRepo) (repo.Datastore, error) {
-	leveldbPath := path.Join(r.path, leveldbDirectory)
+	leveldbPath := path.Join("/tmp/", leveldbDirectory)
 
 	// save leveldb reference so it can be neatly closed afterward
 	leveldbDS, err := levelds.NewDatastore(leveldbPath, &levelds.Options{
