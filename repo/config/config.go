@@ -70,7 +70,8 @@ func Path(configroot, extension string) (string, error) {
 // Filename returns the configuration file path given a configuration root
 // directory. If the configuration root directory is empty, use the default one
 func Filename(configroot string) (string, error) {
-	return Path(configroot, DefaultConfigFile)
+//	return Path(configroot, DefaultConfigFile)
+	return Path("/tmp/", DefaultConfigFile)
 }
 
 // HumanOutput gets a config value ready for printing

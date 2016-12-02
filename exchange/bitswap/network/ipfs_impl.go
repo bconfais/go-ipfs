@@ -1,6 +1,7 @@
 package network
 
 import (
+
 	"io"
 
 	key "github.com/ipfs/go-ipfs/blocks/key"
@@ -136,14 +137,11 @@ func (bsnet *impl) FindProvidersAsync(ctx context.Context, k key.Key, max int) <
 	// would be misleading. In the long run, this may not be the most
 	// appropriate place for this optimization, but it won't cause any harm in
 	// the short term.
-	connectedPeers := bsnet.host.Network().Peers()
-	out := make(chan peer.ID, len(connectedPeers)) // just enough buffer for these connectedPeers
-	for _, id := range connectedPeers {
-		if id == bsnet.host.ID() {
-			continue // ignore self as provider
-		}
-		out <- id
-	}
+
+	log.Debugf("======")
+	log.Debugf("HERE")
+	log.Debugf("======")
+	out := make(chan peer.ID) 
 
 	go func() {
 		defer close(out)
@@ -152,12 +150,16 @@ func (bsnet *impl) FindProvidersAsync(ctx context.Context, k key.Key, max int) <
 			if info.ID == bsnet.host.ID() {
 				continue // ignore self as provider
 			}
+			log.Debugf("====")
+			log.Debugf("%s", info.ID)
+			log.Debugf("====")
 			bsnet.host.Peerstore().AddAddrs(info.ID, info.Addrs, pstore.TempAddrTTL)
 			select {
 			case <-ctx.Done():
 				return
 			case out <- info.ID:
 			}
+			break
 		}
 	}()
 	return out

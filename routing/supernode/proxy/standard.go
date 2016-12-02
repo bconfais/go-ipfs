@@ -66,7 +66,7 @@ func (p *standard) HandleStream(s inet.Stream) {
 	s.Close()
 }
 
-const replicationFactor = 2
+const replicationFactor = 1
 
 // SendMessage sends message to each remote sequentially (randomized order),
 // stopping after the first successful response. If all fail, returns the last
