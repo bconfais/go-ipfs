@@ -134,7 +134,6 @@ func (pm *WantManager) startPeerHandler(p peer.ID) *msgQueue {
 	}
 	mq.out = fullwantlist
 	mq.work <- struct{}{}
-
 	pm.peers[p] = mq
 	go mq.runQueue(pm.ctx)
 	return mq
@@ -241,7 +240,7 @@ func (pm *WantManager) Run() {
 	for {
 		select {
 		case entries := <-pm.incoming:
-
+			log.Debugf("blah")
 			// add changes to our wantlist
 			var filtered []*bsmsg.Entry
 			for _, e := range entries {
@@ -257,12 +256,17 @@ func (pm *WantManager) Run() {
 			}
 
 			// broadcast those wantlist changes
+
 			for _, p := range pm.peers {
 				p.addMessage(filtered)
+				break
 			}
+
 
 		case <-tock.C:
 			// resend entire wantlist every so often (REALLY SHOULDNT BE NECESSARY)
+			log.Debugf("resend")
+/*
 			var es []*bsmsg.Entry
 			for _, e := range pm.wl.Entries() {
 				es = append(es, &bsmsg.Entry{Entry: e})
@@ -275,6 +279,7 @@ func (pm *WantManager) Run() {
 
 				p.addMessage(es)
 			}
+*/
 		case p := <-pm.connect:
 			pm.startPeerHandler(p)
 		case p := <-pm.disconnect:

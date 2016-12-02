@@ -219,6 +219,7 @@ func (bs *Bitswap) providerQueryManager(ctx context.Context) {
 							log.Debug("failed to connect to provider %s: %s", p, err)
 						}
 					}(p)
+					break
 				}
 				wg.Wait()
 				activeLk.Lock()
