@@ -259,17 +259,16 @@ func (pm *WantManager) Run() {
 
 			for _, p := range pm.peers {
 				p.addMessage(filtered)
-				break
 			}
 
 
 		case <-tock.C:
 			// resend entire wantlist every so often (REALLY SHOULDNT BE NECESSARY)
 			log.Debugf("resend")
-/*
 			var es []*bsmsg.Entry
 			for _, e := range pm.wl.Entries() {
 				es = append(es, &bsmsg.Entry{Entry: e})
+				break
 			}
 
 			for _, p := range pm.peers {
@@ -279,7 +278,6 @@ func (pm *WantManager) Run() {
 
 				p.addMessage(es)
 			}
-*/
 		case p := <-pm.connect:
 			pm.startPeerHandler(p)
 		case p := <-pm.disconnect:

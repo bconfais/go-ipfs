@@ -137,10 +137,6 @@ func (bsnet *impl) FindProvidersAsync(ctx context.Context, k key.Key, max int) <
 	// would be misleading. In the long run, this may not be the most
 	// appropriate place for this optimization, but it won't cause any harm in
 	// the short term.
-
-	log.Debugf("======")
-	log.Debugf("HERE")
-	log.Debugf("======")
 	out := make(chan peer.ID) 
 
 	go func() {
@@ -157,7 +153,7 @@ func (bsnet *impl) FindProvidersAsync(ctx context.Context, k key.Key, max int) <
 			select {
 			case <-ctx.Done():
 				return
-			case out <- info.ID:
+//			case out <- info.ID:
 			}
 			break
 		}
