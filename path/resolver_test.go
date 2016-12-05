@@ -1,23 +1,24 @@
 package path_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
-	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
-
-	key "github.com/ipfs/go-ipfs/blocks/key"
 	merkledag "github.com/ipfs/go-ipfs/merkledag"
 	dagmock "github.com/ipfs/go-ipfs/merkledag/test"
 	path "github.com/ipfs/go-ipfs/path"
-	util "gx/ipfs/QmZNVWh8LLjAavuQ2JXuFmuYH3C11xo988vSgp7UQrTRj1/go-ipfs-util"
+
+	node "gx/ipfs/QmUsVJ7AEnGyjX8YWnrwq9vmECVGwBQNAKPpgz5KSg8dcq/go-ipld-node"
+	key "gx/ipfs/QmYEoKZXHoAToWfhGF3vryhMn3WWhE1o2MasQ8uzY5iDi9/go-key"
+	util "gx/ipfs/Qmb912gdngC1UWwTkhuW8knyRbcWeu5kqkxBpveLmW8bSr/go-ipfs-util"
 )
 
-func randNode() (*merkledag.Node, key.Key) {
-	node := new(merkledag.Node)
+func randNode() (*merkledag.ProtoNode, key.Key) {
+	node := new(merkledag.ProtoNode)
 	node.SetData(make([]byte, 32))
 	util.NewTimeSeededRand().Read(node.Data())
-	k, _ := node.Key()
+	k := node.Key()
 	return node, k
 }
 
@@ -39,17 +40,14 @@ func TestRecurivePathResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, n := range []*merkledag.Node{a, b, c} {
+	for _, n := range []node.Node{a, b, c} {
 		_, err = dagService.Add(n)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	aKey, err := a.Key()
-	if err != nil {
-		t.Fatal(err)
-	}
+	aKey := a.Key()
 
 	segments := []string{aKey.String(), "child", "grandchild"}
 	p, err := path.FromSegments("/ipfs/", segments...)
@@ -57,16 +55,13 @@ func TestRecurivePathResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resolver := &path.Resolver{DAG: dagService}
+	resolver := path.NewBasicResolver(dagService)
 	node, err := resolver.ResolvePath(ctx, p)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	key, err := node.Key()
-	if err != nil {
-		t.Fatal(err)
-	}
+	key := node.Cid()
 	if key.String() != cKey.String() {
 		t.Fatal(fmt.Errorf(
 			"recursive path resolution failed for %s: %s != %s",

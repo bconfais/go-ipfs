@@ -1,32 +1,34 @@
 package network
 
 import (
-
+	"context"
+	"fmt"
 	"io"
 
-	key "github.com/ipfs/go-ipfs/blocks/key"
 	bsmsg "github.com/ipfs/go-ipfs/exchange/bitswap/message"
-	routing "github.com/ipfs/go-ipfs/routing"
 
-	logging "gx/ipfs/QmNQynaz7qfriSUJkiEZUrm2Wen1u3Kj9goZzWtrPyu7XR/go-log"
-	pstore "gx/ipfs/QmQdnfvZQuhdT93LNc5bos52wAmdr3G2p6G8teLJMEN32P/go-libp2p-peerstore"
-	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
-	host "gx/ipfs/QmVCe3SNMjkcPgnpFhZs719dheq6xE7gJwjzV7aWcUM4Ms/go-libp2p/p2p/host"
-	inet "gx/ipfs/QmVCe3SNMjkcPgnpFhZs719dheq6xE7gJwjzV7aWcUM4Ms/go-libp2p/p2p/net"
-	ma "gx/ipfs/QmYzDkkgAEmrcNzFCiYo6L1dTX4EAG1gZkbtdbd9trL4vd/go-multiaddr"
+	logging "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
+	inet "gx/ipfs/QmU3pGGVT1riXp5dBJbNrGpxssVScfvk9236drRHZZbKJ1/go-libp2p-net"
+	ma "gx/ipfs/QmUAQaWbKxGCUTuoQVvvicbQNZ9APF5pDGWyAZSe93AtKH/go-multiaddr"
+	routing "gx/ipfs/QmUrCwTDvJgmBbJVHu1HGEyqDaod3dR6sEkZkpxZk4u47c/go-libp2p-routing"
+	pstore "gx/ipfs/QmXXCcQ7CLg5a81Ui9TTR35QcR4y7ZyihxwfjqaHfUVcVo/go-libp2p-peerstore"
 	ggio "gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/io"
-	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
+	host "gx/ipfs/Qmb6UFbVu1grhv5o5KnouvtZ6cqdrjXj6zLejAHWunxgCt/go-libp2p-host"
+	cid "gx/ipfs/QmcEcrBAMrwMyhSjXt4yfyPpzgSuV8HLHavnfmiKCSRqZU/go-cid"
+	peer "gx/ipfs/QmfMmLGoKzCHDN7cGgk64PJr4iipzidDRME8HABSJqvmhC/go-libp2p-peer"
 )
 
 var log = logging.Logger("bitswap_network")
 
 // NewFromIpfsHost returns a BitSwapNetwork supported by underlying IPFS host
-func NewFromIpfsHost(host host.Host, r routing.IpfsRouting) BitSwapNetwork {
+func NewFromIpfsHost(host host.Host, r routing.ContentRouting) BitSwapNetwork {
 	bitswapNetwork := impl{
 		host:    host,
 		routing: r,
 	}
 	host.SetStreamHandler(ProtocolBitswap, bitswapNetwork.handleNewStream)
+	host.SetStreamHandler(ProtocolBitswapOne, bitswapNetwork.handleNewStream)
+	host.SetStreamHandler(ProtocolBitswapNoVers, bitswapNetwork.handleNewStream)
 	host.Network().Notify((*netNotifiee)(&bitswapNetwork))
 	// TODO: StopNotify.
 
@@ -37,7 +39,7 @@ func NewFromIpfsHost(host host.Host, r routing.IpfsRouting) BitSwapNetwork {
 // NetMessage objects, into the bitswap network interface.
 type impl struct {
 	host    host.Host
-	routing routing.IpfsRouting
+	routing routing.ContentRouting
 
 	// inbound messages from the network are forwarded to the receiver
 	receiver Receiver
@@ -52,7 +54,25 @@ func (s *streamMessageSender) Close() error {
 }
 
 func (s *streamMessageSender) SendMsg(msg bsmsg.BitSwapMessage) error {
-	return msg.ToNet(s.s)
+	return msgToStream(s.s, msg)
+}
+
+func msgToStream(s inet.Stream, msg bsmsg.BitSwapMessage) error {
+	switch s.Protocol() {
+	case ProtocolBitswap:
+		if err := msg.ToNetV1(s); err != nil {
+			log.Debugf("error: %s", err)
+			return err
+		}
+	case ProtocolBitswapOne, ProtocolBitswapNoVers:
+		if err := msg.ToNetV0(s); err != nil {
+			log.Debugf("error: %s", err)
+			return err
+		}
+	default:
+		return fmt.Errorf("unrecognized protocol on remote: %s", s.Protocol())
+	}
+	return nil
 }
 
 func (bsnet *impl) NewMessageSender(ctx context.Context, p peer.ID) (MessageSender, error) {
@@ -73,7 +93,7 @@ func (bsnet *impl) newStreamToPeer(ctx context.Context, p peer.ID) (inet.Stream,
 		return nil, err
 	}
 
-	return bsnet.host.NewStream(ctx, ProtocolBitswap, p)
+	return bsnet.host.NewStream(ctx, p, ProtocolBitswap, ProtocolBitswapOne, ProtocolBitswapNoVers)
 }
 
 func (bsnet *impl) SendMessage(
@@ -87,37 +107,7 @@ func (bsnet *impl) SendMessage(
 	}
 	defer s.Close()
 
-	if err := outgoing.ToNet(s); err != nil {
-		log.Debugf("error: %s", err)
-		return err
-	}
-
-	return err
-}
-
-func (bsnet *impl) SendRequest(
-	ctx context.Context,
-	p peer.ID,
-	outgoing bsmsg.BitSwapMessage) (bsmsg.BitSwapMessage, error) {
-
-	s, err := bsnet.newStreamToPeer(ctx, p)
-	if err != nil {
-		return nil, err
-	}
-	defer s.Close()
-
-	if err := outgoing.ToNet(s); err != nil {
-		log.Debugf("error: %s", err)
-		return nil, err
-	}
-
-	incoming, err := bsmsg.FromNet(s)
-	if err != nil {
-		log.Debugf("error: %s", err)
-		return incoming, err
-	}
-
-	return incoming, nil
+	return msgToStream(s, outgoing)
 }
 
 func (bsnet *impl) SetDelegate(r Receiver) {
@@ -129,7 +119,7 @@ func (bsnet *impl) ConnectTo(ctx context.Context, p peer.ID) error {
 }
 
 // FindProvidersAsync returns a channel of providers for the given key
-func (bsnet *impl) FindProvidersAsync(ctx context.Context, k key.Key, max int) <-chan peer.ID {
+func (bsnet *impl) FindProvidersAsync(ctx context.Context, k *cid.Cid, max int) <-chan peer.ID {
 
 	// Since routing queries are expensive, give bitswap the peers to which we
 	// have open connections. Note that this may cause issues if bitswap starts
@@ -137,7 +127,14 @@ func (bsnet *impl) FindProvidersAsync(ctx context.Context, k key.Key, max int) <
 	// would be misleading. In the long run, this may not be the most
 	// appropriate place for this optimization, but it won't cause any harm in
 	// the short term.
-	out := make(chan peer.ID) 
+	connectedPeers := bsnet.host.Network().Peers()
+	out := make(chan peer.ID, len(connectedPeers)) // just enough buffer for these connectedPeers
+	for _, id := range connectedPeers {
+		if id == bsnet.host.ID() {
+			continue // ignore self as provider
+		}
+		out <- id
+	}
 
 	go func() {
 		defer close(out)
@@ -146,23 +143,19 @@ func (bsnet *impl) FindProvidersAsync(ctx context.Context, k key.Key, max int) <
 			if info.ID == bsnet.host.ID() {
 				continue // ignore self as provider
 			}
-			log.Debugf("====")
-			log.Debugf("%s", info.ID)
-			log.Debugf("====")
 			bsnet.host.Peerstore().AddAddrs(info.ID, info.Addrs, pstore.TempAddrTTL)
 			select {
 			case <-ctx.Done():
 				return
-//			case out <- info.ID:
+			case out <- info.ID:
 			}
-			break
 		}
 	}()
 	return out
 }
 
 // Provide provides the key to the network
-func (bsnet *impl) Provide(ctx context.Context, k key.Key) error {
+func (bsnet *impl) Provide(ctx context.Context, k *cid.Cid) error {
 	return bsnet.routing.Provide(ctx, k)
 }
 

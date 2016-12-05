@@ -1,21 +1,18 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 
+	logging "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
+	loggables "gx/ipfs/QmTMy4hVSY28DdwJ9kBz6y7q6MuioFzPcpM3Ma3aPjo1i3/go-libp2p-loggables"
+	inet "gx/ipfs/QmU3pGGVT1riXp5dBJbNrGpxssVScfvk9236drRHZZbKJ1/go-libp2p-net"
+	kbucket "gx/ipfs/QmUKePKcUEXwdvJENZJ6z8mJjPaxLsDZ3V9CZjPPtyawPm/go-libp2p-kbucket"
+	pstore "gx/ipfs/QmXXCcQ7CLg5a81Ui9TTR35QcR4y7ZyihxwfjqaHfUVcVo/go-libp2p-peerstore"
 	ggio "gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/io"
-	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
-
-	logging "gx/ipfs/QmNQynaz7qfriSUJkiEZUrm2Wen1u3Kj9goZzWtrPyu7XR/go-log"
-	pstore "gx/ipfs/QmQdnfvZQuhdT93LNc5bos52wAmdr3G2p6G8teLJMEN32P/go-libp2p-peerstore"
-	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
-	host "gx/ipfs/QmVCe3SNMjkcPgnpFhZs719dheq6xE7gJwjzV7aWcUM4Ms/go-libp2p/p2p/host"
-	inet "gx/ipfs/QmVCe3SNMjkcPgnpFhZs719dheq6xE7gJwjzV7aWcUM4Ms/go-libp2p/p2p/net"
-
-	key "github.com/ipfs/go-ipfs/blocks/key"
-	dhtpb "github.com/ipfs/go-ipfs/routing/dht/pb"
-	kbucket "github.com/ipfs/go-ipfs/routing/kbucket"
-	loggables "github.com/ipfs/go-ipfs/thirdparty/loggables"
+	dhtpb "gx/ipfs/QmaMRCpeKL34rdT7t3bEndrENbVdD6gcCZr3YdkDUk6jue/go-libp2p-kad-dht/pb"
+	host "gx/ipfs/Qmb6UFbVu1grhv5o5KnouvtZ6cqdrjXj6zLejAHWunxgCt/go-libp2p-host"
+	peer "gx/ipfs/QmfMmLGoKzCHDN7cGgk64PJr4iipzidDRME8HABSJqvmhC/go-libp2p-peer"
 )
 
 const ProtocolSNR = "/ipfs/supernoderouting"
@@ -66,7 +63,7 @@ func (p *standard) HandleStream(s inet.Stream) {
 	s.Close()
 }
 
-const replicationFactor = 1
+const replicationFactor = 2
 
 // SendMessage sends message to each remote sequentially (randomized order),
 // stopping after the first successful response. If all fail, returns the last
@@ -101,7 +98,7 @@ func (px *standard) sendMessage(ctx context.Context, m *dhtpb.Message, remote pe
 	if err = px.Host.Connect(ctx, pstore.PeerInfo{ID: remote}); err != nil {
 		return err
 	}
-	s, err := px.Host.NewStream(ctx, ProtocolSNR, remote)
+	s, err := px.Host.NewStream(ctx, remote, ProtocolSNR)
 	if err != nil {
 		return err
 	}
@@ -136,7 +133,7 @@ func (px *standard) sendRequest(ctx context.Context, m *dhtpb.Message, remote pe
 		e.SetError(err)
 		return nil, err
 	}
-	s, err := px.Host.NewStream(ctx, ProtocolSNR, remote)
+	s, err := px.Host.NewStream(ctx, remote, ProtocolSNR)
 	if err != nil {
 		e.SetError(err)
 		return nil, err
@@ -166,6 +163,6 @@ func (px *standard) sendRequest(ctx context.Context, m *dhtpb.Message, remote pe
 }
 
 func sortedByKey(peers []peer.ID, skey string) []peer.ID {
-	target := kbucket.ConvertKey(key.Key(skey))
+	target := kbucket.ConvertKey(skey)
 	return kbucket.SortClosestPeers(peers, target)
 }

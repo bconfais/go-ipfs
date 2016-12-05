@@ -2,6 +2,7 @@ package merkledag_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,39 +11,21 @@ import (
 	"sync"
 	"testing"
 
-	bstore "github.com/ipfs/go-ipfs/blocks/blockstore"
-	key "github.com/ipfs/go-ipfs/blocks/key"
 	bserv "github.com/ipfs/go-ipfs/blockservice"
 	bstest "github.com/ipfs/go-ipfs/blockservice/test"
 	offline "github.com/ipfs/go-ipfs/exchange/offline"
 	imp "github.com/ipfs/go-ipfs/importer"
 	chunk "github.com/ipfs/go-ipfs/importer/chunk"
 	. "github.com/ipfs/go-ipfs/merkledag"
+	mdpb "github.com/ipfs/go-ipfs/merkledag/pb"
 	dstest "github.com/ipfs/go-ipfs/merkledag/test"
-	"github.com/ipfs/go-ipfs/pin"
 	uio "github.com/ipfs/go-ipfs/unixfs/io"
-	ds "gx/ipfs/QmTxLSvdhwg68WJimdS6icLPhZi28aTp6b7uihC2Yb47Xk/go-datastore"
-	dssync "gx/ipfs/QmTxLSvdhwg68WJimdS6icLPhZi28aTp6b7uihC2Yb47Xk/go-datastore/sync"
-	u "gx/ipfs/QmZNVWh8LLjAavuQ2JXuFmuYH3C11xo988vSgp7UQrTRj1/go-ipfs-util"
-	"gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
+
+	node "gx/ipfs/QmUsVJ7AEnGyjX8YWnrwq9vmECVGwBQNAKPpgz5KSg8dcq/go-ipld-node"
+	key "gx/ipfs/QmYEoKZXHoAToWfhGF3vryhMn3WWhE1o2MasQ8uzY5iDi9/go-key"
+	u "gx/ipfs/Qmb912gdngC1UWwTkhuW8knyRbcWeu5kqkxBpveLmW8bSr/go-ipfs-util"
+	cid "gx/ipfs/QmcEcrBAMrwMyhSjXt4yfyPpzgSuV8HLHavnfmiKCSRqZU/go-cid"
 )
-
-type dagservAndPinner struct {
-	ds DAGService
-	mp pin.Pinner
-}
-
-func getDagservAndPinner(t *testing.T) dagservAndPinner {
-	db := dssync.MutexWrap(ds.NewMapDatastore())
-	bs := bstore.NewBlockstore(db)
-	blockserv := bserv.New(bs, offline.Exchange(bs))
-	dserv := NewDAGService(blockserv)
-	mpin := pin.NewPinner(db, dserv)
-	return dagservAndPinner{
-		ds: dserv,
-		mp: mpin,
-	}
-}
 
 func TestNode(t *testing.T) {
 
@@ -56,13 +39,13 @@ func TestNode(t *testing.T) {
 		t.Error(err)
 	}
 
-	printn := func(name string, n *Node) {
+	printn := func(name string, n *ProtoNode) {
 		fmt.Println(">", name)
 		fmt.Println("data:", string(n.Data()))
 
 		fmt.Println("links:")
-		for _, l := range n.Links {
-			fmt.Println("-", l.Name, l.Size, l.Hash)
+		for _, l := range n.Links() {
+			fmt.Println("-", l.Name, l.Size, l.Cid)
 		}
 
 		e, err := n.EncodeProtobuf(false)
@@ -72,17 +55,9 @@ func TestNode(t *testing.T) {
 			fmt.Println("encoded:", e)
 		}
 
-		h, err := n.Multihash()
-		if err != nil {
-			t.Error(err)
-		} else {
-			fmt.Println("hash:", h)
-		}
-
-		k, err := n.Key()
-		if err != nil {
-			t.Error(err)
-		} else if k != key.Key(h) {
+		h := n.Multihash()
+		k := n.Key()
+		if k != key.Key(h) {
 			t.Error("Key is not equivalent to multihash")
 		} else {
 			fmt.Println("key: ", k)
@@ -96,7 +71,7 @@ func TestNode(t *testing.T) {
 	printn("beep boop", n3)
 }
 
-func SubtestNodeStat(t *testing.T, n *Node) {
+func SubtestNodeStat(t *testing.T, n *ProtoNode) {
 	enc, err := n.EncodeProtobuf(true)
 	if err != nil {
 		t.Error("n.EncodeProtobuf(true) failed")
@@ -109,14 +84,10 @@ func SubtestNodeStat(t *testing.T, n *Node) {
 		return
 	}
 
-	k, err := n.Key()
-	if err != nil {
-		t.Error("n.Key() failed")
-		return
-	}
+	k := n.Key()
 
-	expected := NodeStat{
-		NumLinks:       len(n.Links),
+	expected := node.NodeStat{
+		NumLinks:       len(n.Links()),
 		BlockSize:      len(enc),
 		LinksSize:      len(enc) - len(n.Data()), // includes framing.
 		DataSize:       len(n.Data()),
@@ -189,10 +160,7 @@ func runBatchFetchTest(t *testing.T, read io.Reader) {
 
 	t.Log("Added file to first node.")
 
-	k, err := root.Key()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := root.Cid()
 
 	wg := sync.WaitGroup{}
 	errs := make(chan error)
@@ -201,13 +169,18 @@ func runBatchFetchTest(t *testing.T, read io.Reader) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			first, err := dagservs[i].Get(ctx, k)
+			first, err := dagservs[i].Get(ctx, c)
 			if err != nil {
 				errs <- err
 			}
 			fmt.Println("Got first node back.")
 
-			read, err := uio.NewDagReader(ctx, first, dagservs[i])
+			firstpb, ok := first.(*ProtoNode)
+			if !ok {
+				errs <- ErrNotProtobuf
+			}
+
+			read, err := uio.NewDagReader(ctx, firstpb, dagservs[i])
 			if err != nil {
 				errs <- err
 			}
@@ -234,35 +207,18 @@ func runBatchFetchTest(t *testing.T, read io.Reader) {
 	}
 }
 
-func assertCanGet(t *testing.T, ds DAGService, n *Node) {
-	k, err := n.Key()
-	if err != nil {
+func assertCanGet(t *testing.T, ds DAGService, n node.Node) {
+	if _, err := ds.Get(context.Background(), n.Cid()); err != nil {
 		t.Fatal(err)
-	}
-
-	if _, err := ds.Get(context.Background(), k); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestEmptyKey(t *testing.T) {
-	ds := dstest.Mock()
-	_, err := ds.Get(context.Background(), key.Key(""))
-	if err != ErrNotFound {
-		t.Error("dag service should error when key is nil", err)
 	}
 }
 
 func TestCantGet(t *testing.T) {
-	dsp := getDagservAndPinner(t)
+	ds := dstest.Mock()
 	a := NodeWithData([]byte("A"))
 
-	k, err := a.Key()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = dsp.ds.Get(context.Background(), k)
+	c := a.Cid()
+	_, err := ds.Get(context.Background(), c)
 	if !strings.Contains(err.Error(), "not found") {
 		t.Fatal("expected err not found, got: ", err)
 	}
@@ -281,18 +237,17 @@ func TestFetchGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = FetchGraph(context.TODO(), root, dservs[1])
+	err = FetchGraph(context.TODO(), root.Cid(), dservs[1])
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// create an offline dagstore and ensure all blocks were fetched
-	bs := bserv.New(bsis[1].Blockstore, offline.Exchange(bsis[1].Blockstore))
+	bs := bserv.New(bsis[1].Blockstore(), offline.Exchange(bsis[1].Blockstore()))
 
 	offline_ds := NewDAGService(bs)
-	ks := key.NewKeySet()
 
-	err = EnumerateChildren(context.Background(), offline_ds, root, ks, false)
+	err = EnumerateChildren(context.Background(), offline_ds, root.Cid(), func(_ *cid.Cid) bool { return true }, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,21 +263,21 @@ func TestEnumerateChildren(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ks := key.NewKeySet()
-	err = EnumerateChildren(context.Background(), ds, root, ks, false)
+	set := cid.NewSet()
+	err = EnumerateChildren(context.Background(), ds, root.Cid(), set.Visit, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var traverse func(n *Node)
-	traverse = func(n *Node) {
+	var traverse func(n node.Node)
+	traverse = func(n node.Node) {
 		// traverse dag and check
-		for _, lnk := range n.Links {
-			k := key.Key(lnk.Hash)
-			if !ks.Has(k) {
-				t.Fatal("missing key in set!")
+		for _, lnk := range n.Links() {
+			c := lnk.Cid
+			if !set.Has(c) {
+				t.Fatal("missing key in set! ", lnk.Cid.String())
 			}
-			child, err := ds.Get(context.Background(), k)
+			child, err := ds.Get(context.Background(), c)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -337,7 +292,7 @@ func TestFetchFailure(t *testing.T) {
 	ds := dstest.Mock()
 	ds_bad := dstest.Mock()
 
-	top := new(Node)
+	top := new(ProtoNode)
 	for i := 0; i < 10; i++ {
 		nd := NodeWithData([]byte{byte('a' + i)})
 		_, err := ds.Add(nd)
@@ -373,5 +328,126 @@ func TestFetchFailure(t *testing.T) {
 		if err == nil && i >= 10 {
 			t.Fatal("should have failed request")
 		}
+	}
+}
+
+func TestUnmarshalFailure(t *testing.T) {
+	badData := []byte("hello world")
+
+	_, err := DecodeProtobuf(badData)
+	if err == nil {
+		t.Fatal("shouldnt succeed to parse this")
+	}
+
+	// now with a bad link
+	pbn := &mdpb.PBNode{Links: []*mdpb.PBLink{{Hash: []byte("not a multihash")}}}
+	badlink, err := pbn.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = DecodeProtobuf(badlink)
+	if err == nil {
+		t.Fatal("should have failed to parse node with bad link")
+	}
+
+	n := &ProtoNode{}
+	n.Marshal()
+}
+
+func TestBasicAddGet(t *testing.T) {
+	ds := dstest.Mock()
+	nd := new(ProtoNode)
+
+	c, err := ds.Add(nd)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := ds.Get(context.Background(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !nd.Cid().Equals(out.Cid()) {
+		t.Fatal("output didnt match input")
+	}
+}
+
+func TestGetRawNodes(t *testing.T) {
+	rn := NewRawNode([]byte("test"))
+
+	ds := dstest.Mock()
+
+	c, err := ds.Add(rn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !c.Equals(rn.Cid()) {
+		t.Fatal("output cids didnt match")
+	}
+
+	out, err := ds.Get(context.TODO(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(out.RawData(), []byte("test")) {
+		t.Fatal("raw block should match input data")
+	}
+
+	if out.Links() != nil {
+		t.Fatal("raw blocks shouldnt have links")
+	}
+
+	if out.Tree("", -1) != nil {
+		t.Fatal("tree should return no paths in a raw block")
+	}
+
+	size, err := out.Size()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 4 {
+		t.Fatal("expected size to be 4")
+	}
+
+	ns, err := out.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ns.DataSize != 4 {
+		t.Fatal("expected size to be 4, got: ", ns.DataSize)
+	}
+
+	_, _, err = out.Resolve([]string{"foo"})
+	if err != ErrLinkNotFound {
+		t.Fatal("shouldnt find links under raw blocks")
+	}
+}
+
+func TestProtoNodeResolve(t *testing.T) {
+
+	nd := new(ProtoNode)
+	nd.SetLinks([]*node.Link{{Name: "foo"}})
+
+	lnk, left, err := nd.ResolveLink([]string{"foo", "bar"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(left) != 1 || left[0] != "bar" {
+		t.Fatal("expected the single path element 'bar' to remain")
+	}
+
+	if lnk.Name != "foo" {
+		t.Fatal("how did we get anything else?")
+	}
+
+	tvals := nd.Tree("", -1)
+	if len(tvals) != 1 || tvals[0] != "foo" {
+		t.Fatal("expected tree to return []{\"foo\"}")
 	}
 }

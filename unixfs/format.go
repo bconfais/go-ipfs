@@ -1,4 +1,4 @@
-// Package format implements a data format for files in the ipfs filesystem It
+// Package format implements a data format for files in the IPFS filesystem It
 // is not the only format in ipfs, but it is the one that the filesystem
 // assumes
 package unixfs
@@ -224,6 +224,6 @@ func BytesForMetadata(m *Metadata) ([]byte, error) {
 	return proto.Marshal(pbd)
 }
 
-func EmptyDirNode() *dag.Node {
+func EmptyDirNode() *dag.ProtoNode {
 	return dag.NodeWithData(FolderPBData())
 }

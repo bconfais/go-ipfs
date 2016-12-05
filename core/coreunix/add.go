@@ -1,30 +1,33 @@
 package coreunix
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	gopath "path"
 
-	bstore "github.com/ipfs/go-ipfs/blocks/blockstore"
-	key "github.com/ipfs/go-ipfs/blocks/key"
-	bserv "github.com/ipfs/go-ipfs/blockservice"
-	"github.com/ipfs/go-ipfs/exchange/offline"
-	importer "github.com/ipfs/go-ipfs/importer"
-	"github.com/ipfs/go-ipfs/importer/chunk"
-	mfs "github.com/ipfs/go-ipfs/mfs"
-	"github.com/ipfs/go-ipfs/pin"
-	ds "gx/ipfs/QmTxLSvdhwg68WJimdS6icLPhZi28aTp6b7uihC2Yb47Xk/go-datastore"
-	syncds "gx/ipfs/QmTxLSvdhwg68WJimdS6icLPhZi28aTp6b7uihC2Yb47Xk/go-datastore/sync"
-	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
-
 	bs "github.com/ipfs/go-ipfs/blocks/blockstore"
+	bstore "github.com/ipfs/go-ipfs/blocks/blockstore"
+	bserv "github.com/ipfs/go-ipfs/blockservice"
 	"github.com/ipfs/go-ipfs/commands/files"
 	core "github.com/ipfs/go-ipfs/core"
+	"github.com/ipfs/go-ipfs/exchange/offline"
+	balanced "github.com/ipfs/go-ipfs/importer/balanced"
+	"github.com/ipfs/go-ipfs/importer/chunk"
+	ihelper "github.com/ipfs/go-ipfs/importer/helpers"
+	trickle "github.com/ipfs/go-ipfs/importer/trickle"
 	dag "github.com/ipfs/go-ipfs/merkledag"
+	mfs "github.com/ipfs/go-ipfs/mfs"
+	"github.com/ipfs/go-ipfs/pin"
 	unixfs "github.com/ipfs/go-ipfs/unixfs"
-	logging "gx/ipfs/QmNQynaz7qfriSUJkiEZUrm2Wen1u3Kj9goZzWtrPyu7XR/go-log"
+
+	logging "gx/ipfs/QmSpJByNKFX1sCsHBEp3R73FL4NF6FnQTEGyNAXHm2GS52/go-log"
+	node "gx/ipfs/QmUsVJ7AEnGyjX8YWnrwq9vmECVGwBQNAKPpgz5KSg8dcq/go-ipld-node"
+	ds "gx/ipfs/QmbzuUusHqaLLoNTDEVLcSF6vZDHZDLPC7p4bztRvvkXxU/go-datastore"
+	syncds "gx/ipfs/QmbzuUusHqaLLoNTDEVLcSF6vZDHZDLPC7p4bztRvvkXxU/go-datastore/sync"
+	cid "gx/ipfs/QmcEcrBAMrwMyhSjXt4yfyPpzgSuV8HLHavnfmiKCSRqZU/go-cid"
 )
 
 var log = logging.Logger("coreunix")
@@ -97,13 +100,14 @@ type Adder struct {
 	Hidden     bool
 	Pin        bool
 	Trickle    bool
+	RawLeaves  bool
 	Silent     bool
 	Wrap       bool
 	Chunker    string
-	root       *dag.Node
+	root       node.Node
 	mr         *mfs.Root
 	unlocker   bs.Unlocker
-	tempRoot   key.Key
+	tempRoot   *cid.Cid
 }
 
 func (adder *Adder) SetMfsRoot(r *mfs.Root) {
@@ -111,25 +115,25 @@ func (adder *Adder) SetMfsRoot(r *mfs.Root) {
 }
 
 // Perform the actual add & pin locally, outputting results to reader
-func (adder Adder) add(reader io.Reader) (*dag.Node, error) {
+func (adder Adder) add(reader io.Reader) (node.Node, error) {
 	chnk, err := chunk.FromString(reader, adder.Chunker)
 	if err != nil {
 		return nil, err
 	}
+	params := ihelper.DagBuilderParams{
+		Dagserv:   adder.dagService,
+		RawLeaves: adder.RawLeaves,
+		Maxlinks:  ihelper.DefaultLinksPerBlock,
+	}
 
 	if adder.Trickle {
-		return importer.BuildTrickleDagFromReader(
-			adder.dagService,
-			chnk,
-		)
+		return trickle.TrickleLayout(params.New(chnk))
 	}
-	return importer.BuildDagFromReader(
-		adder.dagService,
-		chnk,
-	)
+
+	return balanced.BalancedLayout(params.New(chnk))
 }
 
-func (adder *Adder) RootNode() (*dag.Node, error) {
+func (adder *Adder) RootNode() (node.Node, error) {
 	// for memoizing
 	if adder.root != nil {
 		return adder.root, nil
@@ -141,11 +145,13 @@ func (adder *Adder) RootNode() (*dag.Node, error) {
 	}
 
 	// if not wrapping, AND one root file, use that hash as root.
-	if !adder.Wrap && len(root.Links) == 1 {
-		root, err = root.Links[0].GetNode(adder.ctx, adder.dagService)
+	if !adder.Wrap && len(root.Links()) == 1 {
+		nd, err := root.Links()[0].GetNode(adder.ctx, adder.dagService)
 		if err != nil {
 			return nil, err
 		}
+
+		root = nd
 	}
 
 	adder.root = root
@@ -166,7 +172,7 @@ func (adder *Adder) PinRoot() error {
 		return err
 	}
 
-	if adder.tempRoot != "" {
+	if adder.tempRoot != nil {
 		err := adder.pinning.Unpin(adder.ctx, adder.tempRoot, true)
 		if err != nil {
 			return err
@@ -178,7 +184,7 @@ func (adder *Adder) PinRoot() error {
 	return adder.pinning.Flush()
 }
 
-func (adder *Adder) Finalize() (*dag.Node, error) {
+func (adder *Adder) Finalize() (node.Node, error) {
 	root := adder.mr.GetValue()
 
 	// cant just call adder.RootNode() here as we need the name for printing
@@ -189,7 +195,7 @@ func (adder *Adder) Finalize() (*dag.Node, error) {
 
 	var name string
 	if !adder.Wrap {
-		name = rootNode.Links[0].Name
+		name = rootNode.Links()[0].Name
 
 		dir, ok := adder.mr.GetValue().(*mfs.Directory)
 		if !ok {
@@ -248,6 +254,10 @@ func (adder *Adder) outputDirs(path string, fsn mfs.FSNode) error {
 // Add builds a merkledag from the a reader, pinning all objects to the local
 // datastore. Returns a key representing the root node.
 func Add(n *core.IpfsNode, r io.Reader) (string, error) {
+	return AddWithContext(n.Context(), n, r)
+}
+
+func AddWithContext(ctx context.Context, n *core.IpfsNode, r io.Reader) (string, error) {
 	defer n.Blockstore.PinLock().Unlock()
 
 	fileAdder, err := NewAdder(n.Context(), n.Pinning, n.Blockstore, n.DAG)
@@ -259,12 +269,8 @@ func Add(n *core.IpfsNode, r io.Reader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	k, err := node.Key()
-	if err != nil {
-		return "", err
-	}
 
-	return k.String(), nil
+	return node.Cid().String(), nil
 }
 
 // AddR recursively adds files in |path|.
@@ -297,19 +303,14 @@ func AddR(n *core.IpfsNode, root string) (key string, err error) {
 		return "", err
 	}
 
-	k, err := nd.Key()
-	if err != nil {
-		return "", err
-	}
-
-	return k.String(), nil
+	return nd.String(), nil
 }
 
 // AddWrapped adds data from a reader, and wraps it with a directory object
 // to preserve the filename.
 // Returns the path of the added file ("<dir hash>/filename"), the DAG node of
 // the directory, and and error if any.
-func AddWrapped(n *core.IpfsNode, r io.Reader, filename string) (string, *dag.Node, error) {
+func AddWrapped(n *core.IpfsNode, r io.Reader, filename string) (string, node.Node, error) {
 	file := files.NewReaderFile(filename, filename, ioutil.NopCloser(r), nil)
 	fileAdder, err := NewAdder(n.Context(), n.Pinning, n.Blockstore, n.DAG)
 	if err != nil {
@@ -329,23 +330,14 @@ func AddWrapped(n *core.IpfsNode, r io.Reader, filename string) (string, *dag.No
 		return "", nil, err
 	}
 
-	k, err := dagnode.Key()
-	if err != nil {
-		return "", nil, err
-	}
-
-	return gopath.Join(k.String(), filename), dagnode, nil
+	c := dagnode.Cid()
+	return gopath.Join(c.String(), filename), dagnode, nil
 }
 
-func (adder *Adder) addNode(node *dag.Node, path string) error {
+func (adder *Adder) addNode(node node.Node, path string) error {
 	// patch it into the root
 	if path == "" {
-		key, err := node.Key()
-		if err != nil {
-			return err
-		}
-
-		path = key.B58String()
+		path = node.Cid().String()
 	}
 
 	dir := gopath.Dir(path)
@@ -367,9 +359,13 @@ func (adder *Adder) addNode(node *dag.Node, path string) error {
 
 // Add the given file while respecting the adder.
 func (adder *Adder) AddFile(file files.File) error {
-	adder.unlocker = adder.blockstore.PinLock()
+	if adder.Pin {
+		adder.unlocker = adder.blockstore.PinLock()
+	}
 	defer func() {
-		adder.unlocker.Unlock()
+		if adder.unlocker != nil {
+			adder.unlocker.Unlock()
+		}
 	}()
 
 	return adder.addFile(file)
@@ -406,7 +402,12 @@ func (adder *Adder) addFile(file files.File) error {
 	// progress updates to the client (over the output channel)
 	var reader io.Reader = file
 	if adder.Progress {
-		reader = &progressReader{file: file, out: adder.Out}
+		rdr := &progressReader{file: file, out: adder.Out}
+		if fi, ok := file.(files.FileInfo); ok {
+			reader = &progressReader2{rdr, fi}
+		} else {
+			reader = rdr
+		}
 	}
 
 	dagnode, err := adder.add(reader)
@@ -450,7 +451,7 @@ func (adder *Adder) addDir(dir files.File) error {
 }
 
 func (adder *Adder) maybePauseForGC() error {
-	if adder.blockstore.GCRequested() {
+	if adder.unlocker != nil && adder.blockstore.GCRequested() {
 		err := adder.PinRoot()
 		if err != nil {
 			return err
@@ -463,7 +464,7 @@ func (adder *Adder) maybePauseForGC() error {
 }
 
 // outputDagnode sends dagnode info over the output channel
-func outputDagnode(out chan interface{}, name string, dn *dag.Node) error {
+func outputDagnode(out chan interface{}, name string, dn node.Node) error {
 	if out == nil {
 		return nil
 	}
@@ -489,21 +490,17 @@ func NewMemoryDagService() dag.DAGService {
 }
 
 // from core/commands/object.go
-func getOutput(dagnode *dag.Node) (*Object, error) {
-	key, err := dagnode.Key()
-	if err != nil {
-		return nil, err
-	}
+func getOutput(dagnode node.Node) (*Object, error) {
+	c := dagnode.Cid()
 
 	output := &Object{
-		Hash:  key.B58String(),
-		Links: make([]Link, len(dagnode.Links)),
+		Hash:  c.String(),
+		Links: make([]Link, len(dagnode.Links())),
 	}
 
-	for i, link := range dagnode.Links {
+	for i, link := range dagnode.Links() {
 		output.Links[i] = Link{
 			Name: link.Name,
-			//Hash: link.Hash.B58String(),
 			Size: link.Size,
 		}
 	}
@@ -531,4 +528,9 @@ func (i *progressReader) Read(p []byte) (int, error) {
 	}
 
 	return n, err
+}
+
+type progressReader2 struct {
+	*progressReader
+	files.FileInfo
 }
