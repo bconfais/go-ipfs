@@ -3,6 +3,7 @@ package bitswap
 import (
 	"sync"
 	"time"
+	"fmt"
 
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	engine "github.com/ipfs/go-ipfs/exchange/bitswap/decision"
@@ -75,8 +76,10 @@ func (pm *WantManager) WantBlocks(ctx context.Context, ks []key.Key) {
 }
 
 func (pm *WantManager) CancelWants(ks []key.Key) {
-	log.Infof("cancel wants: %s", ks)
-	pm.addEntries(context.TODO(), ks, true)
+	if 0 < len(ks) {
+		log.Infof("cancel wants: %s", ks)
+		pm.addEntries(context.TODO(), ks, true)
+	}
 }
 
 func (pm *WantManager) addEntries(ctx context.Context, ks []key.Key, cancel bool) {
@@ -88,6 +91,7 @@ func (pm *WantManager) addEntries(ctx context.Context, ks []key.Key, cancel bool
 				Key:      k,
 				Priority: kMaxPriority - i,
 				RefCnt:   1,
+				Provider: "",
 			},
 		})
 	}
@@ -130,7 +134,9 @@ func (pm *WantManager) startPeerHandler(p peer.ID) *msgQueue {
 	// new peer, we will want to give them our full wantlist
 	fullwantlist := bsmsg.New(true)
 	for _, e := range pm.wl.Entries() {
-		fullwantlist.AddEntry(e.Key, e.Priority)
+		if e.Provider == p {
+			fullwantlist.AddEntry(e.Key, e.Priority)
+		}
 	}
 	mq.out = fullwantlist
 	mq.work <- struct{}{}
@@ -200,6 +206,7 @@ func (mq *msgQueue) doWork(ctx context.Context) {
 
 	// grab outgoing message
 	mq.outlk.Lock()
+
 	wlm := mq.out
 	if wlm == nil || wlm.Empty() {
 		mq.outlk.Unlock()
@@ -233,15 +240,32 @@ func (pm *WantManager) Disconnected(p peer.ID) {
 	}
 }
 
+func (pm *WantManager) SetProvForKey(k key.Key, p peer.ID) {
+	pm.wl.SetProvForKey(k,p)
+	var filtered []*bsmsg.Entry
+	for _, e := range pm.wl.Entries() {
+		if e.Provider == p {
+			filtered = append(filtered, &bsmsg.Entry{Entry: e})
+		}
+	}
+	pm.peers[p].addMessage(filtered)
+	fmt.Printf("===============\n")
+	for _, e := range filtered {
+		fmt.Printf("%s\n", e.Key)
+	}
+	fmt.Printf("===============\n")
+}
+
 // TODO: use goprocess here once i trust it
 func (pm *WantManager) Run() {
 	tock := time.NewTicker(rebroadcastDelay.Get())
 	defer tock.Stop()
+	i := 0
 	for {
+		i = i+1
 		select {
 		case entries := <-pm.incoming:
 			log.Debugf("blah")
-			// add changes to our wantlist
 			var filtered []*bsmsg.Entry
 			for _, e := range entries {
 				if e.Cancel {
@@ -255,31 +279,46 @@ func (pm *WantManager) Run() {
 				}
 			}
 
-			// broadcast those wantlist changes
 
-			for _, p := range pm.peers {
-				p.addMessage(filtered)
-				break
+			for id, p := range pm.peers {
+				// add changes to our wantlist
+				var nfiltered []*bsmsg.Entry
+				fmt.Printf("===============\n")
+				for _, e := range filtered {
+					if e.Provider == id {
+						nfiltered = append(nfiltered, e)
+						fmt.Printf("%s\n", e.Key)
+
+					}
+				}
+				fmt.Printf("===============\n")
+				p.addMessage(nfiltered)
 			}
 
 
 		case <-tock.C:
 			// resend entire wantlist every so often (REALLY SHOULDNT BE NECESSARY)
 			log.Debugf("resend")
-/*
-			var es []*bsmsg.Entry
-			for _, e := range pm.wl.Entries() {
-				es = append(es, &bsmsg.Entry{Entry: e})
-			}
+			j := 0
+			for id, p := range pm.peers {
+				j = j+1
+				var es []*bsmsg.Entry
+				for _, e := range pm.wl.Entries() {
+					if e.Provider == id {
+						es = append(es, &bsmsg.Entry{Entry: e})
+					}
+					if e.Provider == "" && 1 < i {
+						es = append(es, &bsmsg.Entry{Entry: e})
+					}
+				}
 
-			for _, p := range pm.peers {
 				p.outlk.Lock()
 				p.out = bsmsg.New(true)
 				p.outlk.Unlock()
 
 				p.addMessage(es)
 			}
-*/
+
 		case p := <-pm.connect:
 			pm.startPeerHandler(p)
 		case p := <-pm.disconnect:

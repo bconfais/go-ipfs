@@ -97,7 +97,7 @@ func New(parent context.Context, p peer.ID, network bsnet.BitSwapNetwork,
 	network.SetDelegate(bs)
 
 	// Start up bitswaps async worker routines
-	bs.startWorkers(px, ctx)
+	bs.startWorkers(px, ctx, bs.wm)
 
 	// bind the context and process.
 	// do it over here to avoid closing before all setup is done.
@@ -199,7 +199,9 @@ func (bs *Bitswap) GetBlock(parent context.Context, k key.Key) (blocks.Block, er
 func (bs *Bitswap) WantlistForPeer(p peer.ID) []key.Key {
 	var out []key.Key
 	for _, e := range bs.engine.WantlistForPeer(p) {
-		out = append(out, e.Key)
+		if e.Provider == p {
+			out = append(out, e.Key)
+		}
 	}
 	return out
 }

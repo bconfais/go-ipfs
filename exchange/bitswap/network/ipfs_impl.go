@@ -150,9 +150,6 @@ func (bsnet *impl) FindProvidersAsync(ctx context.Context, k key.Key, max int) <
 			if info.ID == bsnet.host.ID() {
 				continue // ignore self as provider
 			}
-			log.Debugf("====")
-			log.Debugf("%s", info.ID)
-			log.Debugf("====")
 			bsnet.host.Peerstore().AddAddrs(info.ID, info.Addrs, pstore.TempAddrTTL)
 			select {
 			case <-ctx.Done():
