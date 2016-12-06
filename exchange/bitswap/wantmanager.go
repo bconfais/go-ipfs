@@ -92,6 +92,7 @@ func (pm *WantManager) addEntries(ctx context.Context, ks []key.Key, cancel bool
 				Priority: kMaxPriority - i,
 				RefCnt:   1,
 				Provider: "",
+				Asked: false,
 			},
 		})
 	}
@@ -134,7 +135,8 @@ func (pm *WantManager) startPeerHandler(p peer.ID) *msgQueue {
 	// new peer, we will want to give them our full wantlist
 	fullwantlist := bsmsg.New(true)
 	for _, e := range pm.wl.Entries() {
-		if e.Provider == p {
+		if e.Provider == p && false == e.Asked {
+			e.Asked = true
 			fullwantlist.AddEntry(e.Key, e.Priority)
 		}
 	}
@@ -244,7 +246,8 @@ func (pm *WantManager) SetProvForKey(k key.Key, p peer.ID) {
 	pm.wl.SetProvForKey(k,p)
 	var filtered []*bsmsg.Entry
 	for _, e := range pm.wl.Entries() {
-		if e.Provider == p {
+		if e.Provider == p && false == e.Asked {
+			e.Asked = true
 			filtered = append(filtered, &bsmsg.Entry{Entry: e})
 		}
 	}
@@ -255,6 +258,7 @@ func (pm *WantManager) SetProvForKey(k key.Key, p peer.ID) {
 	}
 	fmt.Printf("===============\n")
 }
+
 
 // TODO: use goprocess here once i trust it
 func (pm *WantManager) Run() {
@@ -280,15 +284,17 @@ func (pm *WantManager) Run() {
 			}
 
 
+			j := 0
 			for id, p := range pm.peers {
+				j = j+1
 				// add changes to our wantlist
 				var nfiltered []*bsmsg.Entry
 				fmt.Printf("===============\n")
 				for _, e := range filtered {
-					if e.Provider == id {
+					if e.Provider == id && false == e.Asked {
+						e.Asked = true
 						nfiltered = append(nfiltered, e)
 						fmt.Printf("%s\n", e.Key)
-
 					}
 				}
 				fmt.Printf("===============\n")
@@ -304,10 +310,15 @@ func (pm *WantManager) Run() {
 				j = j+1
 				var es []*bsmsg.Entry
 				for _, e := range pm.wl.Entries() {
-					if e.Provider == id {
+					if e.Provider == id && false == e.Asked {
+						e.Asked = true
 						es = append(es, &bsmsg.Entry{Entry: e})
 					}
-					if e.Provider == "" && 1 < i {
+					/* keys that are not in the DHT */
+					if e.Provider == "" && (i%2==j && i < 2) {
+//						e.Asked = true
+//						var a = []key.Key{e.Key}
+//						pm.WantBlocks(pm.ctx,a)
 						es = append(es, &bsmsg.Entry{Entry: e})
 					}
 				}

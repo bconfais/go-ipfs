@@ -24,6 +24,7 @@ type Entry struct {
 	Key      key.Key
 	Priority int
 	Provider peer.ID
+	Asked bool
 	RefCnt int
 }
 
