@@ -203,7 +203,7 @@ func (i internalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	select {
 		case <- t:
 			return
-		case <-time.After(30*time.Second):
+		case <-time.After(120*time.Second):
 			s := fmt.Sprintf("cmds/http: timeout")
 			http.Error(w, s, http.StatusInternalServerError)
 			return

@@ -315,7 +315,7 @@ func (pm *WantManager) Run() {
 						es = append(es, &bsmsg.Entry{Entry: e})
 					}
 					/* keys that are not in the DHT */
-					if e.Provider == "" && (i%2==j && i < 2) {
+					if e.Provider == "" && 1 == j {
 //						e.Asked = true
 //						var a = []key.Key{e.Key}
 //						pm.WantBlocks(pm.ctx,a)
