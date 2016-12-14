@@ -55,61 +55,63 @@ func (b *arccache) hasCached(k key.Key) (has bool, ok bool) {
 }
 
 func (b *arccache) Has(k key.Key) (bool, error) {
+	res, err := b.blockstore.Has(k)
+	return res, err
 /*
 	if has, ok := b.hasCached(k); ok {
 		return has, nil
 	}
-*/
-	res, err := b.blockstore.Has(k)
 	if err == nil {
 		b.arc.Add(k, res)
 	}
-	return res, err
+*/
 }
 
 func (b *arccache) Get(k key.Key) (blocks.Block, error) {
+	bl, err := b.blockstore.Get(k)
+	return bl, err
 /*
 	if has, ok := b.hasCached(k); ok && !has {
 		return nil, ErrNotFound
 	}
-*/
-	bl, err := b.blockstore.Get(k)
-/*
 	if bl == nil && err == ErrNotFound {
 		b.arc.Add(k, false)
 	} else if bl != nil {
 		b.arc.Add(k, true)
 	}
 */
-	return bl, err
 }
 
 func (b *arccache) Put(bl blocks.Block) error {
+	err := b.blockstore.Put(bl)
+/*
 	if has, ok := b.hasCached(bl.Key()); ok && has {
 		return nil
 	}
 
-	err := b.blockstore.Put(bl)
 	if err == nil {
 		b.arc.Add(bl.Key(), true)
 	}
+*/
 	return err
 }
 
 func (b *arccache) PutMany(bs []blocks.Block) error {
+	err := b.blockstore.PutMany(bs)
+	if err != nil {
+		return err
+	}
+/*
 	var good []blocks.Block
 	for _, block := range bs {
 		if has, ok := b.hasCached(block.Key()); !ok || (ok && !has) {
 			good = append(good, block)
 		}
 	}
-	err := b.blockstore.PutMany(bs)
-	if err != nil {
-		return err
-	}
 	for _, block := range bs {
 		b.arc.Add(block.Key(), true)
 	}
+*/
 	return nil
 }
 

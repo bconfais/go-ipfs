@@ -14,7 +14,7 @@ import (
 	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
 )
 
-var TaskWorkerCount = 8
+var TaskWorkerCount = 100
 
 func (bs *Bitswap) startWorkers(px process.Process, ctx context.Context, wm *WantManager) {
 	// Start up a worker to handle block requests this node is making
