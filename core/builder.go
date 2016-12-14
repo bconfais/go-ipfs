@@ -58,7 +58,8 @@ func (cfg *BuildCfg) fillDefaults() error {
 	}
 
 	if cfg.Routing == nil {
-		cfg.Routing = DHTOption
+//		cfg.Routing = DHTOption
+		cfg.Routing =CloudRouterOption
 	}
 
 	if cfg.Host == nil {
