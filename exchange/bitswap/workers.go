@@ -215,7 +215,7 @@ func (bs *Bitswap) providerQueryManager(ctx context.Context, wm *WantManager) {
 					wg.Add(1)
 					go func(p peer.ID) {
 						defer wg.Done()
-						wm.SetProvForKey(e.Key, p)
+//						wm.SetProvForKey(e.Key, p)
 						err := bs.network.ConnectTo(child, p)
 						if err != nil {
 							log.Debug("failed to connect to provider %s: %s", p, err)

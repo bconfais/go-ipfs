@@ -9,7 +9,7 @@ import (
 	routing "github.com/ipfs/go-ipfs/routing"
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
-	ds "gx/ipfs/QmTxLSvdhwg68WJimdS6icLPhZi28aTp6b7uihC2Yb47Xk/go-datastore"
+//	ds "gx/ipfs/QmTxLSvdhwg68WJimdS6icLPhZi28aTp6b7uihC2Yb47Xk/go-datastore"
 	logging "gx/ipfs/QmNQynaz7qfriSUJkiEZUrm2Wen1u3Kj9goZzWtrPyu7XR/go-log"
 	p2phost "gx/ipfs/QmVCe3SNMjkcPgnpFhZs719dheq6xE7gJwjzV7aWcUM4Ms/go-libp2p/p2p/host"
 	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
@@ -125,6 +125,9 @@ func (c *CloudClient) FindProvidersAsync(ctx context.Context, k key.Key, count i
 }
 
 func (c *CloudClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan pstore.PeerInfo) error {
+        fmt.Printf("======\n")
+        fmt.Printf("Find %s\n", k)
+        fmt.Printf("======\n")
 	/* send get to cloud */
 	m := Message{"GET", key.B58KeyEncode(k), "", []string{}}
 	if "" == c.cloud_addr {
@@ -135,8 +138,11 @@ func (c *CloudClient) FindProvidersAsync_(ctx context.Context, k key.Key, out ch
 	if nil != err { log.Debugf("%s", err); return err }
 	conn, err := net.Dial("tcp", c.cloud_addr)
 	if nil != err { log.Debugf("%s", err); return err }
+        fmt.Printf("Send")
 	fmt.Fprintf(conn, string(m_json))
+
 	buffer := make([]byte, 2048)
+        fmt.Printf("Wait to receive location…")
 	length, err := conn.Read(buffer)
 	if nil != err { log.Debugf("%s", err); return err }
 	if 0 >= length {
@@ -163,8 +169,11 @@ func (c *CloudClient) FindProvidersAsync_(ctx context.Context, k key.Key, out ch
 
 /* called when a GET message is received */
 func (c *CloudClient) FindHandler(conn net.Conn, message Message) error {
+	fmt.Printf("GET message received for %s\n", message.Key)
+        k := key.B58KeyDecode(message.Key)
 	providers := []Provider{}
-	providers_json, err := c.datastore.Get(ds.NewKey(message.Key))
+//	providers_json, err := c.datastore.Get(ds.NewKey(message.Key))
+	providers_json, err := c.datastore.Get(k.DsKey())
 	if nil != err {
 		log.Debugf("%s", err); return err;
 	}
@@ -211,6 +220,7 @@ func (c *CloudClient) Provide(ctx context.Context, k key.Key) error {
 		return nil
 	}
 	m_json, err := json.Marshal(m)
+        fmt.Printf("%s\n",m_json)
 	if nil != err { log.Debugf("%s", err); return err }
 	conn, err := net.Dial("tcp", c.cloud_addr)
 	if nil != err { log.Debugf("%s", err); return err }
@@ -251,6 +261,8 @@ func (c *CloudClient) AddProvider(k key.Key, ID string, Addrs []string ) error {
 	providers := []Provider{}
 	provider :=  Provider{ID, Addrs}
 
+
+/*
 	old_providers_json, err := c.datastore.Get(k.DsKey())
 	if nil == err {
 		log.Debugf("key found %s", k)
@@ -259,7 +271,7 @@ func (c *CloudClient) AddProvider(k key.Key, ID string, Addrs []string ) error {
 		if nil != err { log.Debugf("%s", err); return err }
 	}
 
-	/* check if the provider already exist */
+	// check if the provider already exist
 	found := false
 	for i := 0; i < len(providers); i++ {
 		if providers[i].ID == provider.ID {
@@ -269,18 +281,21 @@ func (c *CloudClient) AddProvider(k key.Key, ID string, Addrs []string ) error {
 			break
 		}
 	}
+
+	// add ourself as provider
 	if false == found {
 		providers = append(providers, provider)
 	}
 
-	if false == found {
-		providers_json, err := json.Marshal(providers)
-		if nil != err { log.Debugf("%s", err); return err }
-		log.Debugf("%s", providers_json)
+*/
+ 	// remove old providers and put only the current node
+	providers = append(providers, provider)
 
-		err = c.datastore.Put(k.DsKey(), []byte(providers_json))
-		if nil != err { log.Debugf("%s", err); return err }
-	}
+	providers_json, err := json.Marshal(providers)
+	if nil != err { log.Debugf("%s", err); return err }
+	log.Debugf("%s", providers_json)
+	err = c.datastore.Put(k.DsKey(), []byte(providers_json))
+	if nil != err { log.Debugf("%s", err); return err }
 
 	return nil
 }
