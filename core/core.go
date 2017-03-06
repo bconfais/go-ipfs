@@ -145,6 +145,8 @@ func (n *IpfsNode) startOnlineServices(ctx context.Context, routingOption Routin
 	if err != nil {
 		return err
 	}
+	dht.Cfg = cfg
+
 	var addrfilter []*net.IPNet
 	for _, s := range cfg.Swarm.AddrFilters {
 		f, err := mamask.NewMask(s)

@@ -5,6 +5,8 @@ package blockservice
 
 import (
 	"errors"
+	"time"
+	"fmt"
 
 	blocks "github.com/ipfs/go-ipfs/blocks"
 	"github.com/ipfs/go-ipfs/blocks/blockstore"
@@ -78,10 +80,13 @@ func (s *BlockService) GetBlock(ctx context.Context, k key.Key) (blocks.Block, e
 	}
 
 	log.Debugf("BlockService GetBlock: '%s'", k)
+	s1 := time.Now()
 	block, err := s.Blockstore.Get(k)
 	if err == nil {
 		return block, nil
 	}
+	ss1 := time.Since(s1)
+	fmt.Printf("GetBlock took %s\n", ss1)
 
 	if err == blockstore.ErrNotFound && s.Exchange != nil {
 		// TODO be careful checking ErrNotFound. If the underlying

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	config "github.com/ipfs/go-ipfs/repo/config"
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	routing "github.com/ipfs/go-ipfs/routing"
 	pb "github.com/ipfs/go-ipfs/routing/dht/pb"
@@ -29,6 +30,7 @@ import (
 	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
 )
 
+var Cfg *config.Config
 var log = logging.Logger("dht")
 
 var ProtocolDHT protocol.ID = "/ipfs/dht"
@@ -86,6 +88,7 @@ func NewDHT(ctx context.Context, h host.Host, dstore ds.Batching) *IpfsDHT {
 
 	h.SetStreamHandler(ProtocolDHT, dht.handleNewStream)
 	dht.providers = providers.NewProviderManager(dht.ctx, dht.self, dstore)
+	providers.Cfg = Cfg
 	dht.proc.AddChild(dht.providers.Process())
 	goprocessctx.CloseAfterContext(dht.proc, ctx)
 

@@ -123,6 +123,8 @@ func (i Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (i internalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debug("incoming API request: ", r.URL)
 
+	sfinal := time.Now()
+
 	t := make(chan string, 1)
 	go func() {
 
@@ -130,7 +132,6 @@ func (i internalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r := recover(); r != nil {
 			log.Error("a panic has occurred in the commands handler!")
 			log.Error(r)
-
 			debug.PrintStack()
 		}
 	}()
@@ -187,7 +188,11 @@ func (i internalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// call the command
+	start := time.Now()
 	res := i.root.Call(req)
+	d := time.Since(start)
+	fmt.Printf("Call start at %f\n", float64(start.UTC().UnixNano()) / float64(1000000000) )
+	fmt.Printf("Call took %s\n", d)
 
 	// set user's headers first.
 	for k, v := range i.cfg.Headers {
@@ -197,13 +202,20 @@ func (i internalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// now handle responding to the client properly
+	start2 := time.Now()
 	sendResponse(w, r, res, req)
+	d2 := time.Since(start2)
+	fmt.Printf("Send response took %s\n", d2)
+
+	ssfinal := time.Since(sfinal)
+	fmt.Printf("Total: %s\n", ssfinal)
+
 	t <- "ok"
 	}()
 	select {
 		case <- t:
 			return
-		case <-time.After(120*time.Second):
+		case <-time.After(300*time.Second):
 			s := fmt.Sprintf("cmds/http: timeout")
 			http.Error(w, s, http.StatusInternalServerError)
 			return
@@ -297,8 +309,14 @@ func sendResponse(w http.ResponseWriter, r *http.Request, res cmds.Response, req
 		return
 	}
 
+	s1 := time.Now()
 	w.WriteHeader(status)
+	ss1 := time.Since(s1)
+	fmt.Printf("Write header took %s\n", ss1)
+	s2 := time.Now()
 	err = flushCopy(w, out)
+	ss2 := time.Since(s2)
+	fmt.Printf("flushCopy took %s\n", ss2)
 	if err != nil {
 		log.Error("err: ", err)
 		w.Header().Set(StreamErrHeader, sanitizedErrStr(err))
@@ -306,6 +324,30 @@ func sendResponse(w http.ResponseWriter, r *http.Request, res cmds.Response, req
 }
 
 func flushCopy(w io.Writer, r io.Reader) error {
+	buf := make([]byte, 11000000)
+
+	f, ok := w.(http.Flusher)
+	if !ok {
+		_, err := io.Copy(w, r)
+		return err
+	}
+
+	s1 := time.Now()
+	_, err := io.CopyBuffer(w,r, buf)
+	if nil != err {
+		return err
+	}
+	ss1 := time.Since(s1)
+	fmt.Printf("CopyBuffer took %s\n", ss1)
+
+	s2 := time.Now()
+	f.Flush()
+	ss2 := time.Since(s2)
+	fmt.Printf("Flush took %s\n", ss2)
+
+
+/*
+//	nn := rand.Intn(2000)
 	buf := make([]byte, 4096)
 	f, ok := w.(http.Flusher)
 	if !ok {
@@ -313,7 +355,12 @@ func flushCopy(w io.Writer, r io.Reader) error {
 		return err
 	}
 	for {
+		s4 := time.Now()
 		n, err := r.Read(buf)
+		ss4 := time.Since(s4)
+//		fmt.Printf("r.Read %d start at %f\n", nn, float64(s4.UTC().UnixNano()) / float64(1000000000))
+//		fmt.Printf("r.Read %d took %s\n", nn, ss4)
+
 		switch err {
 		case io.EOF:
 			if n <= 0 {
@@ -326,18 +373,24 @@ func flushCopy(w io.Writer, r io.Reader) error {
 		default:
 			return err
 		}
-
+		s3 := time.Now()
 		nw, err := w.Write(buf[:n])
 		if err != nil {
 			return err
 		}
+		ss3 := time.Since(s3)
+//		fmt.Printf("w.Write %d start at %f\n", nn, float64(s3.UTC().UnixNano()) / float64(1000000000))
+//		fmt.Printf("w.Write %d took %s\n", nn, ss3)
 
 		if nw != n {
 			return fmt.Errorf("http write failed to write full amount: %d != %d", nw, n)
 		}
-
+		s5 := time.Now()
 		f.Flush()
+		ss5 := time.Since(s5)
+		fmt.Printf("r:%s w:%s f:%s\n", ss4, ss3, ss5)
 	}
+*/
 	return nil
 }
 

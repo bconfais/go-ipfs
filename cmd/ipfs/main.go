@@ -176,7 +176,7 @@ func main() {
 }
 
 func (i *cmdInvocation) Run(ctx context.Context) (output io.Reader, err error) {
-
+	fmt.Print("ok\n")
 	// check if user wants to debug. option OR env var.
 	debug, _, err := i.req.Option("debug").Bool()
 	if err != nil {

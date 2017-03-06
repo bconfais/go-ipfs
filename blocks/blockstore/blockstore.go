@@ -3,6 +3,8 @@
 package blockstore
 
 import (
+	"time"
+	"fmt"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -85,7 +87,13 @@ func (bs *blockstore) Get(k key.Key) (blocks.Block, error) {
 		return nil, ErrNotFound
 	}
 
+	start := time.Now()
 	maybeData, err := bs.datastore.Get(k.DsKey())
+        elapsed := time.Since(start)
+        fmt.Printf("bs.datastore.Get took %s\n", elapsed)
+
+	
+
 	if err == ds.ErrNotFound {
 		return nil, ErrNotFound
 	}
@@ -113,10 +121,12 @@ func (bs *blockstore) Put(block blocks.Block) error {
 	k := block.Key().DsKey()
 
 	// Has is cheaper than Put, so see if we already have it
+/*
 	exists, err := bs.datastore.Has(k)
 	if err == nil && exists {
 		return nil // already stored.
 	}
+*/
 	return bs.datastore.Put(k, block.Data())
 }
 
@@ -127,10 +137,12 @@ func (bs *blockstore) PutMany(blocks []blocks.Block) error {
 	}
 	for _, b := range blocks {
 		k := b.Key().DsKey()
+/*
 		exists, err := bs.datastore.Has(k)
 		if err == nil && exists {
 			continue
 		}
+*/
 
 		err = t.Put(k, b.Data())
 		if err != nil {

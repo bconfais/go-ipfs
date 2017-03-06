@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	config "github.com/ipfs/go-ipfs/repo/config"
 	logging "gx/ipfs/QmNQynaz7qfriSUJkiEZUrm2Wen1u3Kj9goZzWtrPyu7XR/go-log"
 	goprocess "gx/ipfs/QmQopLATEYMNg7dVqZRNDfeE2S1yKy8zrRh5xnYiuqeZBn/goprocess"
 	goprocessctx "gx/ipfs/QmQopLATEYMNg7dVqZRNDfeE2S1yKy8zrRh5xnYiuqeZBn/goprocess/context"
@@ -22,6 +23,7 @@ import (
 	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
 )
 
+var Cfg *config.Config
 var batchBufferSize = 256
 
 func init() {
@@ -58,7 +60,7 @@ type providerSet struct {
 
 type addProv struct {
 	k   key.Key
-	val peer.ID
+	val []peer.ID
 }
 
 type getProv struct {
@@ -257,9 +259,11 @@ func (pm *ProviderManager) run() {
 	for {
 		select {
 		case np := <-pm.newprovs:
-			err := pm.addProv(np.k, np.val)
-			if err != nil {
-				log.Error("error adding new providers: ", err)
+			for _,val := range np.val {
+				err := pm.addProv(np.k, val)
+				if err != nil {
+					log.Error("error adding new providers: ", err)
+				}
 			}
 		case gp := <-pm.getprovs:
 			provs, err := pm.providersForKey(gp.k)
@@ -305,10 +309,19 @@ func (pm *ProviderManager) run() {
 }
 
 func (pm *ProviderManager) AddProvider(ctx context.Context, k key.Key, val peer.ID) {
+//	s := make(peer.ID, 1)
+//	s[0] = val
+	s := []peer.ID{val}
+	for _,p := range Cfg.Site.Peers {
+		id,_ := peer.IDB58Decode(p)
+		s = append(s, id)
+	}
 	prov := &addProv{
 		k:   k,
-		val: val,
+		val: s,
 	}
+	fmt.Printf("%s\n", Cfg.Site.Peers)
+	fmt.Printf("%s\n", val)
 	select {
 	case pm.newprovs <- prov:
 	case <-ctx.Done():

@@ -25,7 +25,7 @@ import (
 // buffer allows multiple queries to execute simultaneously, return their
 // results and continue querying closer peers. Note that different query
 // results will wait for the channel to drain.
-var asyncQueryBuffer = 1000
+var asyncQueryBuffer = 3000
 
 // This file implements the Routing interface for the IpfsDHT struct.
 

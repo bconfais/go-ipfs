@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"time"
 
 	"github.com/ipfs/go-ipfs/path"
 	logging "gx/ipfs/QmNQynaz7qfriSUJkiEZUrm2Wen1u3Kj9goZzWtrPyu7XR/go-log"
@@ -108,10 +109,15 @@ func (c *Command) Call(req Request) Response {
 		return res
 	}
 
+	ss := time.Now()
+//	sss := runtime.FuncForPC(reflect.ValueOf(cmd.Run).Pointer()).Name()
+//	fmt.Printf("%s\n", sss)
 	cmd.Run(req, res)
 	if res.Error() != nil {
 		return res
 	}
+	ss2 := time.Since(ss)
+	fmt.Printf("Run took %s\n", ss2)
 
 	output := res.Output()
 	isChan := false
