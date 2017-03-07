@@ -133,12 +133,9 @@ func (n *IpfsNode) startOnlineServices(ctx context.Context, routingOption Routin
 	}
 
 	// load private key
-/*
 	if err := n.LoadPrivateKey(); err != nil {
 		return err
 	}
-*/
-
 	// Set reporter
 	n.Reporter = metrics.NewBandwidthCounter()
 
@@ -439,6 +436,7 @@ func (n *IpfsNode) loadID() error {
 }
 
 func (n *IpfsNode) LoadPrivateKey() error {
+	return nil
 	if n.Identity == "" || n.Peerstore == nil {
 		return errors.New("loaded private key out of order.")
 	}

@@ -309,10 +309,10 @@ func (pm *ProviderManager) run() {
 func (pm *ProviderManager) AddProvider(ctx context.Context, k key.Key, val peer.ID) {
 //	s := make(peer.ID, 1)
 //	s[0] = val
-	id, _ := peer.IDB58Decode(Cfg.Site.LastPeer)
+//	id, _ := peer.IDB58Decode(Cfg.Site.LastPeer)
 	prov := &addProv{
 		k:   k,
-		val: id,
+		val: val,
 	}
 	select {
 	case pm.newprovs <- prov:
@@ -334,7 +334,8 @@ func (pm *ProviderManager) GetProviders(ctx context.Context, k key.Key) []peer.I
 	case <-ctx.Done():
 		return nil
 	case peers := <-gp.resp:
-//		return peers
+		return peers
+/*
 		p := []peer.ID{}
 		for _,lastpeerid := range peers {
 			lastpeer := peer.IDB58Encode(lastpeerid)
@@ -358,7 +359,7 @@ func (pm *ProviderManager) GetProviders(ctx context.Context, k key.Key) []peer.I
 			fmt.Printf("%s\n", pp)
 		}
 		return p
-
+*/
 	}
 }
 

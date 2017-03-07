@@ -245,7 +245,10 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key key.Key) error {
 	defer log.EventBegin(ctx, "provide", &key).Done()
 
 	// add self locally
-	dht.providers.AddProvider(ctx, key, dht.self)
+//	dht.providers.AddProvider(ctx, key, dht.self)
+	id, _ := peer.IDB58Decode(Cfg.Site.LastPeer)
+	fmt.Printf("%s\n", Cfg.Site.LastPeer)
+	dht.providers.AddProvider(ctx, key, id)
 
 	peers, err := dht.GetClosestPeers(ctx, key)
 	if err != nil {
@@ -273,6 +276,7 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key key.Key) error {
 	return nil
 }
 func (dht *IpfsDHT) makeProvRecord(skey key.Key) (*pb.Message, error) {
+//	id, _ := peer.IDB58Decode(Cfg.Site.LastPeer)
 	pi := pstore.PeerInfo{
 		ID:    dht.self,
 		Addrs: dht.host.Addrs(),
@@ -315,15 +319,36 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 	ps := pset.NewLimited(count)
 	provs := dht.providers.GetProviders(ctx, key)
 	for _, p := range provs {
+		fmt.Printf("%s\n", peer.IDB58Encode(p))
 		// NOTE: Assuming that this list of peers is unique
 		if ps.TryAdd(p) {
+/*
 			select {
-			case peerOut <- dht.peerstore.PeerInfo(p):
-			case <-ctx.Done():
-				return
+				case peerOut <- dht.peerstore.PeerInfo(p):
+				case <-ctx.Done():
+					return
 			}
-		}
+*/
 
+			lastpeer := peer.IDB58Encode(p)
+			prefix := lastpeer[:len(lastpeer)-1]
+			last := lastpeer[len(lastpeer)-1:]
+			ids := "abcdefABCDEF0123456789"
+			for _,c := range ids {
+				spid := prefix + string(c)
+				pid,_  := peer.IDB58Decode(spid)
+				select {
+				case peerOut <- dht.peerstore.PeerInfo(pid):
+				case <-ctx.Done():
+					return
+				}
+				if ( string(c) == string(last) ) {
+					break
+				}
+			}
+//*/
+
+		}
 		// If we have enough peers locally, dont bother with remote RPC
 		if ps.Size() >= count {
 			return
@@ -351,12 +376,35 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 			log.Debugf("got provider: %s", prov)
 			if ps.TryAdd(prov.ID) {
 				log.Debugf("using provider: %s", prov)
+/*
 				select {
 				case peerOut <- prov:
 				case <-ctx.Done():
 					log.Debug("context timed out sending more providers")
 					return nil, ctx.Err()
 				}
+*/
+
+				lastpeer := peer.IDB58Encode(prov.ID)
+				prefix := lastpeer[:len(lastpeer)-1]
+				last := lastpeer[len(lastpeer)-1:]
+				ids := "abcdefABCDEF0123456789"
+				for _,c := range ids {
+					spid := prefix + string(c)
+					pid,_  := peer.IDB58Decode(spid)
+					pp := pstore.PeerInfo{pid, prov.Addrs}
+					select {
+					case peerOut <- pp:
+					case <-ctx.Done():
+						log.Debug("context timed out sending more providers")
+						return nil, ctx.Err()
+					}
+					if ( string(c) == string(last) ) {
+						break
+					}
+				}
+//*/
+
 			}
 			if ps.Size() >= count {
 				log.Debugf("got enough providers (%d/%d)", ps.Size(), count)
