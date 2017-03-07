@@ -60,7 +60,7 @@ type providerSet struct {
 
 type addProv struct {
 	k   key.Key
-	val []peer.ID
+	val peer.ID
 }
 
 type getProv struct {
@@ -259,11 +259,9 @@ func (pm *ProviderManager) run() {
 	for {
 		select {
 		case np := <-pm.newprovs:
-			for _,val := range np.val {
-				err := pm.addProv(np.k, val)
-				if err != nil {
-					log.Error("error adding new providers: ", err)
-				}
+			err := pm.addProv(np.k, np.val)
+			if err != nil {
+				log.Error("error adding new providers: ", err)
 			}
 		case gp := <-pm.getprovs:
 			provs, err := pm.providersForKey(gp.k)
@@ -311,17 +309,11 @@ func (pm *ProviderManager) run() {
 func (pm *ProviderManager) AddProvider(ctx context.Context, k key.Key, val peer.ID) {
 //	s := make(peer.ID, 1)
 //	s[0] = val
-	s := []peer.ID{val}
-	for _,p := range Cfg.Site.Peers {
-		id,_ := peer.IDB58Decode(p)
-		s = append(s, id)
-	}
+	id, _ := peer.IDB58Decode(Cfg.Site.LastPeer)
 	prov := &addProv{
 		k:   k,
-		val: s,
+		val: id,
 	}
-	fmt.Printf("%s\n", Cfg.Site.Peers)
-	fmt.Printf("%s\n", val)
 	select {
 	case pm.newprovs <- prov:
 	case <-ctx.Done():
@@ -342,7 +334,31 @@ func (pm *ProviderManager) GetProviders(ctx context.Context, k key.Key) []peer.I
 	case <-ctx.Done():
 		return nil
 	case peers := <-gp.resp:
-		return peers
+//		return peers
+		p := []peer.ID{}
+		for _,lastpeerid := range peers {
+			lastpeer := peer.IDB58Encode(lastpeerid)
+			prefix := lastpeer[:len(lastpeer)-1]
+			last := lastpeer[len(lastpeer)-1:]
+			ids := "abcdefABCDEF0123456789"
+			for _,c := range ids {
+				spid := prefix + string(c)
+				fmt.Printf("%s\n", spid)
+				pid,_  := peer.IDB58Decode(spid)
+				p = append(p, pid)
+				if ( string(c) == string(last) ) {
+					break
+				}
+			}
+			fmt.Printf("%s\n", lastpeer)
+			fmt.Printf("%s\n", prefix)
+			fmt.Printf("%s\n", last)
+		}
+		for _,pp := range p {
+			fmt.Printf("%s\n", pp)
+		}
+		return p
+
 	}
 }
 

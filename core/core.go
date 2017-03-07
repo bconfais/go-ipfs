@@ -133,9 +133,11 @@ func (n *IpfsNode) startOnlineServices(ctx context.Context, routingOption Routin
 	}
 
 	// load private key
+/*
 	if err := n.LoadPrivateKey(); err != nil {
 		return err
 	}
+*/
 
 	// Set reporter
 	n.Reporter = metrics.NewBandwidthCounter()
@@ -540,14 +542,15 @@ func loadPrivateKey(cfg *config.Identity, id peer.ID) (ic.PrivKey, error) {
 		return nil, err
 	}
 
+/*
 	id2, err := peer.IDFromPrivateKey(sk)
 	if err != nil {
 		return nil, err
 	}
-
 	if id2 != id {
 		return nil, fmt.Errorf("private key in config does not match id: %s != %s", id, id2)
 	}
+*/
 
 	return sk, nil
 }
