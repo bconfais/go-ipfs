@@ -436,7 +436,6 @@ func (n *IpfsNode) loadID() error {
 }
 
 func (n *IpfsNode) LoadPrivateKey() error {
-	return nil
 	if n.Identity == "" || n.Peerstore == nil {
 		return errors.New("loaded private key out of order.")
 	}
