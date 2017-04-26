@@ -3,7 +3,7 @@
 package blocks
 
 import (
-	"errors"
+//	"errors"
 	"fmt"
 
 	key "github.com/ipfs/go-ipfs/blocks/key"
@@ -30,16 +30,22 @@ func NewBlock(data []byte) *BasicBlock {
 	return &BasicBlock{data: data, multihash: u.Hash(data)}
 }
 
+func NewBlockWithKey(data []byte, key string) *BasicBlock {
+	return &BasicBlock{data: data, multihash: []byte(key)}
+}
+
 // NewBlockWithHash creates a new block when the hash of the data
 // is already known, this is used to save time in situations where
 // we are able to be confident that the data is correct
 func NewBlockWithHash(data []byte, h mh.Multihash) (*BasicBlock, error) {
+/*
 	if u.Debug {
 		chk := u.Hash(data)
 		if string(chk) != string(h) {
 			return nil, errors.New("Data did not match given hash!")
 		}
 	}
+*/
 	return &BasicBlock{data: data, multihash: h}, nil
 }
 

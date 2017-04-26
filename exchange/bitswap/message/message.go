@@ -2,7 +2,6 @@ package message
 
 import (
 	"io"
-
 	blocks "github.com/ipfs/go-ipfs/blocks"
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	pb "github.com/ipfs/go-ipfs/exchange/bitswap/message/pb"
@@ -11,7 +10,10 @@ import (
 
 	ggio "gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/io"
 	proto "gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/proto"
+	logging "gx/ipfs/QmNQynaz7qfriSUJkiEZUrm2Wen1u3Kj9goZzWtrPyu7XR/go-log"
 )
+
+var log = logging.Logger("message")
 
 // TODO move message.go into the bitswap package
 // TODO move bs/msg/internal/pb to bs/internal/pb and rename pb package to bitswap_pb
@@ -49,6 +51,7 @@ type impl struct {
 	full     bool
 	wantlist map[key.Key]Entry
 	blocks   map[key.Key]blocks.Block
+	keys     map[key.Key]string
 }
 
 func New(full bool) BitSwapMessage {
@@ -72,9 +75,13 @@ func newMessageFromProto(pbm pb.Message) BitSwapMessage {
 	m := newMsg(pbm.GetWantlist().GetFull())
 	for _, e := range pbm.GetWantlist().GetEntries() {
 		m.addEntry(key.Key(e.GetBlock()), int(e.GetPriority()), e.GetCancel())
+		log.Debugf(string(e.GetBlock()))
 	}
-	for _, d := range pbm.GetBlocks() {
-		b := blocks.NewBlock(d)
+//	log.Debugf(string(w))
+	for i, d := range pbm.GetBlocks() {
+		log.Debugf(string(i))
+//		b := blocks.NewBlockWithKey(d, "test123")
+		b := blocks.NewBlockWithKey(d, pbm.GetKeys()[i])
 		m.AddBlock(b)
 	}
 	return m
@@ -160,6 +167,7 @@ func (m *impl) ToProto() *pb.Message {
 	}
 	for _, b := range m.Blocks() {
 		pbm.Blocks = append(pbm.Blocks, b.Data())
+		pbm.Keys = append(pbm.Keys, string(b.Key()))
 	}
 	return pbm
 }

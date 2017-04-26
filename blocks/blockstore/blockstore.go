@@ -113,10 +113,12 @@ func (bs *blockstore) Put(block blocks.Block) error {
 	k := block.Key().DsKey()
 
 	// Has is cheaper than Put, so see if we already have it
+/*
 	exists, err := bs.datastore.Has(k)
 	if err == nil && exists {
 		return nil // already stored.
 	}
+*/
 	return bs.datastore.Put(k, block.Data())
 }
 

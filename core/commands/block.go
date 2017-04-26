@@ -2,7 +2,7 @@ package commands
 
 import (
 	"bytes"
-	"errors"
+//	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -11,7 +11,7 @@ import (
 	"github.com/ipfs/go-ipfs/blocks"
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	cmds "github.com/ipfs/go-ipfs/commands"
-	mh "gx/ipfs/QmYf7ng2hG5XBtJA3tN34DQ2GUN5HNksEw1rLDkmr6vGku/go-multihash"
+//	mh "gx/ipfs/QmYf7ng2hG5XBtJA3tN34DQ2GUN5HNksEw1rLDkmr6vGku/go-multihash"
 	u "gx/ipfs/QmZNVWh8LLjAavuQ2JXuFmuYH3C11xo988vSgp7UQrTRj1/go-ipfs-util"
 )
 
@@ -112,6 +112,7 @@ It reads from stdin, and <key> is a base58 encoded multihash.
 
 	Arguments: []cmds.Argument{
 		cmds.FileArg("data", true, false, "The data to be stored as an IPFS block.").EnableStdin(),
+		cmds.StringArg("key", true, false, "The base58 multihash of the block to put."),
 	},
 	Run: func(req cmds.Request, res cmds.Response) {
 		n, err := req.InvocContext().GetNode()
@@ -119,6 +120,10 @@ It reads from stdin, and <key> is a base58 encoded multihash.
 			res.SetError(err, cmds.ErrNormal)
 			return
 		}
+
+		key := req.Arguments()[0]
+		log.Debugf(key)
+
 
 		file, err := req.Files().NextFile()
 		if err != nil {
@@ -138,7 +143,7 @@ It reads from stdin, and <key> is a base58 encoded multihash.
 			return
 		}
 
-		b := blocks.NewBlock(data)
+		b := blocks.NewBlockWithKey(data,key)
 		log.Debugf("BlockPut key: '%q'", b.Key())
 
 		k, err := n.Blocks.AddBlock(b)
@@ -146,9 +151,10 @@ It reads from stdin, and <key> is a base58 encoded multihash.
 			res.SetError(err, cmds.ErrNormal)
 			return
 		}
+		log.Debugf(string(k))
 
 		res.SetOutput(&BlockStat{
-			Key:  k.String(),
+			Key:  string(k), //k.String(),
 			Size: len(data),
 		})
 	},
@@ -168,15 +174,20 @@ func getBlockForKey(req cmds.Request, skey string) (blocks.Block, error) {
 	}
 
 	if !u.IsValidHash(skey) {
-		return nil, errors.New("Not a valid hash")
+		log.Debugf("Not a valid hash")
+		//return nil, errors.New("Not a valid hash")
 	}
 
+
+/*
 	h, err := mh.FromB58String(skey)
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf(skey)
+*/
 
-	k := key.Key(h)
+	k := key.Key(skey)
 	b, err := n.Blocks.GetBlock(req.Context(), k)
 	if err != nil {
 		return nil, err

@@ -46,18 +46,21 @@ func (b *arccache) hasCached(k key.Key) (has bool, ok bool) {
 		// in case of invalid key and correct error is created.
 		return false, false
 	}
-
+/*
 	h, ok := b.arc.Get(k)
 	if ok {
 		return h.(bool), true
 	}
+*/
 	return false, false
 }
 
 func (b *arccache) Has(k key.Key) (bool, error) {
+/*
 	if has, ok := b.hasCached(k); ok {
 		return has, nil
 	}
+*/
 
 	res, err := b.blockstore.Has(k)
 	if err == nil {
@@ -67,9 +70,11 @@ func (b *arccache) Has(k key.Key) (bool, error) {
 }
 
 func (b *arccache) Get(k key.Key) (blocks.Block, error) {
+/*
 	if has, ok := b.hasCached(k); ok && !has {
 		return nil, ErrNotFound
 	}
+*/
 
 	bl, err := b.blockstore.Get(k)
 	if bl == nil && err == ErrNotFound {
@@ -81,10 +86,11 @@ func (b *arccache) Get(k key.Key) (blocks.Block, error) {
 }
 
 func (b *arccache) Put(bl blocks.Block) error {
+/*
 	if has, ok := b.hasCached(bl.Key()); ok && has {
 		return nil
 	}
-
+*/
 	err := b.blockstore.Put(bl)
 	if err == nil {
 		b.arc.Add(bl.Key(), true)

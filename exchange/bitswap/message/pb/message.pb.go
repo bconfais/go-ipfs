@@ -23,6 +23,7 @@ var _ = math.Inf
 type Message struct {
 	Wantlist         *Message_Wantlist `protobuf:"bytes,1,opt,name=wantlist" json:"wantlist,omitempty"`
 	Blocks           [][]byte          `protobuf:"bytes,2,rep,name=blocks" json:"blocks,omitempty"`
+	Keys             []string          `protobuf:"bytes,3,rep,name=keys" json:"keys,omitempty"`
 	XXX_unrecognized []byte            `json:"-"`
 }
 
@@ -40,6 +41,13 @@ func (m *Message) GetWantlist() *Message_Wantlist {
 func (m *Message) GetBlocks() [][]byte {
 	if m != nil {
 		return m.Blocks
+	}
+	return nil
+}
+
+func (m *Message) GetKeys() []string {
+	if m != nil {
+		return m.Keys
 	}
 	return nil
 }
