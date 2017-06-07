@@ -38,6 +38,7 @@ import (
 
 	routing "github.com/ipfs/go-ipfs/routing"
 	dht "github.com/ipfs/go-ipfs/routing/dht"
+	dnsrouting "github.com/ipfs/go-ipfs/routing/dns"
 	nilrouting "github.com/ipfs/go-ipfs/routing/none"
 	offroute "github.com/ipfs/go-ipfs/routing/offline"
 
@@ -145,6 +146,8 @@ func (n *IpfsNode) startOnlineServices(ctx context.Context, routingOption Routin
 	if err != nil {
 		return err
 	}
+	dnsrouting.Cfg = cfg
+
 	var addrfilter []*net.IPNet
 	for _, s := range cfg.Swarm.AddrFilters {
 		f, err := mamask.NewMask(s)
@@ -626,4 +629,5 @@ type RoutingOption func(context.Context, p2phost.Host, repo.Datastore) (routing.
 type DiscoveryOption func(p2phost.Host) (discovery.Service, error)
 
 var DHTOption RoutingOption = constructDHTRouting
+var DNSOption RoutingOption = dnsrouting.ConstructDNSRouting
 var NilRouterOption RoutingOption = nilrouting.ConstructNilRouting

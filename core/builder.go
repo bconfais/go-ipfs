@@ -58,7 +58,7 @@ func (cfg *BuildCfg) fillDefaults() error {
 	}
 
 	if cfg.Routing == nil {
-		cfg.Routing = DHTOption
+		cfg.Routing = DNSOption
 	}
 
 	if cfg.Host == nil {
