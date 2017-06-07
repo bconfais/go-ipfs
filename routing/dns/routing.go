@@ -32,6 +32,8 @@ type DNSClient struct {
 
   resolver string
   site string
+  zone string
+  site_fqdn string
   path []string
 }
 
@@ -57,6 +59,11 @@ func ConstructDNSRouting(ctx context.Context, h p2phost.Host, d repo.Datastore) 
   if "" != Cfg.DNS.Site {
     client.site = Cfg.DNS.Site
   }
+  if "" != Cfg.DNS.Zone {
+    client.zone = Cfg.DNS.Zone
+  }
+
+  client.site_fqdn = fmt.Sprintf("%s.%s.", client.site, client.zone)
 
   return client, nil
 }
@@ -64,7 +71,7 @@ func ConstructDNSRouting(ctx context.Context, h p2phost.Host, d repo.Datastore) 
 func (c *DNSClient) Bootstrap(ctx context.Context) error {
   log.Debugf("Bootstrap")
 
-  _, path, error := c.QueryDNSRecursive(c.site, c.QueryTXT, Top2Bottom)
+  _, path, error := c.QueryDNSRecursive(c.site_fqdn, c.QueryTXT, Top2Bottom)
   if nil != error {
     log.Debugf("DNS lookup failed\n")
     ctx.Done()
@@ -208,7 +215,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
     }
 */
 
-    // TODO: here we have the opportunity to prefer a local server than a remote one
+    // TODO: here we have the opportunity to prefer a local server than a remote one, indeed, not needed if we request from bottom to top
     for _, a := range r.Extra {
       next_server := a.(*dns.A).A.String()
       if next_server == server {
@@ -249,6 +256,34 @@ func (c *DNSClient) FindNodesToUpdate(path []string) []string {
   return results
 }
 
+func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
+
+  type_ := "TXT"
+  value := c.site_fqdn
+
+  for 0 != len(servers) {
+    server := (servers)[len(servers)-1]
+    servers = (servers)[0:len(servers)-1]
+    client := new(dns.Client)
+    message := new(dns.Msg)
+    a := fmt.Sprintf("%s.", c.zone)
+    message.SetUpdate(a)
+    record := fmt.Sprintf("%s. 30 IN %s %s", fqdn, type_, value)
+    fmt.Printf("%s -> %s\n", record, server)
+    rr, _ := dns.NewRR(record)
+    rrs := make([]dns.RR, 1)
+    rrs[0] = rr
+    message.Insert(rrs)
+    _, _, err := client.Exchange(message, net.JoinHostPort(server, "53"))
+    if nil != err {
+      log.Debugf("%s\n", err)
+    }
+    type_ = "NS"
+    value = fmt.Sprintf("%s.%s.", server, c.zone)
+  }
+  return nil
+}
+
 
 func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan pstore.PeerInfo) error {
   log.Debugf("FindProvidersAsync_")
@@ -261,11 +296,11 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
   fmt.Printf("%s\n", results)
   fmt.Printf("%s\n", path)
   fmt.Printf("%s\n\n", c.FindNodesToUpdate(path))
+  c.UpdateDNS(string(k), c.FindNodesToUpdate(path))
   ctx.Done()
   return nil
 
 }
-
 
 
 var Cfg *config.Config
