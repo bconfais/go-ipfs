@@ -71,6 +71,10 @@ func (c *DNSClient) PutValue(ctx context.Context, k key.Key, value []byte) error
 }
 
 func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan pstore.PeerInfo) error {
+  log.Debugf("FindProvidersAsync_")
+  c := new(dns.Client)
+  m := new(dns.Msg)
+  
   return nil
 }
 
