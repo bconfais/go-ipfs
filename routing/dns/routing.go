@@ -4,6 +4,7 @@ import (
   "fmt"
   "net"
   "errors"
+  "strings"
   config "github.com/ipfs/go-ipfs/repo/config"
   context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
   dns "github.com/miekg/dns"
@@ -262,6 +263,12 @@ func (c *DNSClient) FindNodesToUpdate(path []string) []string {
 func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   client := new(dns.Client)
 
+  last_server := servers[0]
+  var prelast_server string
+  if len(c.path) >= 2 {
+    prelast_server = servers[1]
+  } 
+
   type_ := "TXT"
   value := c.site_fqdn
 
@@ -284,7 +291,41 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     type_ = "A"
     value = server
   }
+
+  // Extra update (because site1->ip object.site1->other_ip therefore if we request object.site1 we get only other_ip and not the first one)
+  if len(c.path) < 2 {
+   return nil
+  }
+
+  // extract the site from object name
+  site := strings.Join(strings.Split(fqdn, ".")[1:], ".")
+  fmt.Printf("%s\n", last_server)
+  rr, err := c.QueryDNS(client, site, dns.TypeA, last_server)
+  if nil != err {
+    log.Debugf("Unable to set the path on the last server\n")
+    return err
+  }
+  dir := rr[0].(*dns.A).A.String()  
+  fmt.Printf("%s\n", dir)
+  if ( dir != prelast_server ) {
+    fmt.Printf("Additional update\n")
+    message := new(dns.Msg)
+    a := fmt.Sprintf("%s.", c.zone)
+    message.SetUpdate(a)
+    record := fmt.Sprintf("%s. 30 IN A %s", fqdn, dir)
+    fmt.Printf("%s -> %s\n", record, last_server)
+    rr, _ := dns.NewRR(record)
+    rrs := make([]dns.RR, 1)
+    rrs[0] = rr
+    message.Insert(rrs)
+    _, _, err := client.Exchange(message, net.JoinHostPort(last_server, "53"))
+    if nil != err {
+      log.Debugf("%s\n", err)
+    }
+  }
+
   return nil
+
 }
 
 
