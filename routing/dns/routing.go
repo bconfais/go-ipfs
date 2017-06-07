@@ -158,7 +158,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
   client := new(dns.Client)
 
   message := new(dns.Msg)
-  message.SetQuestion(dns.Fqdn(fqdn), dns.TypeNS)
+  message.SetQuestion(dns.Fqdn(fqdn), dns.TypeA)
   message.RecursionDesired = false
 
   var servers []string // a stack of partial answers
@@ -198,15 +198,17 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
       path = (path)[0:len(path)-1]
       continue
     }
-    if 0 == len(r.Extra) {
+    if 0 == len(r.Answer) {
+      fmt.Printf("no answer from %s\n", server)
       res, error := callback(client, fqdn, server)
       results = res 
       if nil != error {
         path = (path)[0:len(path)-1]
         continue
+      } else {
+        found = true
+        break
       }
-      found = true
-      break
     }
 
 /*
@@ -216,9 +218,10 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
 */
 
     // TODO: here we have the opportunity to prefer a local server than a remote one, indeed, not needed if we request from bottom to top
-    for _, a := range r.Extra {
+    for _, a := range r.Answer {
       next_server := a.(*dns.A).A.String()
       if next_server == server {
+        fmt.Printf("--> <--\n")
         res, error := callback(client, fqdn, server)
         results = res
         if nil == error {
@@ -257,6 +260,7 @@ func (c *DNSClient) FindNodesToUpdate(path []string) []string {
 }
 
 func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
+  client := new(dns.Client)
 
   type_ := "TXT"
   value := c.site_fqdn
@@ -264,7 +268,6 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   for 0 != len(servers) {
     server := (servers)[len(servers)-1]
     servers = (servers)[0:len(servers)-1]
-    client := new(dns.Client)
     message := new(dns.Msg)
     a := fmt.Sprintf("%s.", c.zone)
     message.SetUpdate(a)
@@ -278,8 +281,8 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     if nil != err {
       log.Debugf("%s\n", err)
     }
-    type_ = "NS"
-    value = fmt.Sprintf("%s.%s.", server, c.zone)
+    type_ = "A"
+    value = server
   }
   return nil
 }
