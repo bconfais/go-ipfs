@@ -40,11 +40,21 @@ type DNSClient struct {
 }
 
 func reverse(ss []string) {
-    last := len(ss) - 1
-    for i := 0; i < len(ss)/2; i++ {
-        ss[i], ss[last-i] = ss[last-i], ss[i]
-    }
+  last := len(ss) - 1
+  for i := 0; i < len(ss)/2; i++ {
+    ss[i], ss[last-i] = ss[last-i], ss[i]
+  }
 }
+
+func isASCII(s string) bool {
+  for _, c := range s {
+    if c > 127 {
+      return false
+    }
+  }
+ return true
+}
+
 
 func ConstructDNSRouting(ctx context.Context, h p2phost.Host, d repo.Datastore) (routing.IpfsRouting, error) {
   log.Debugf("DNS routing")
@@ -83,9 +93,8 @@ func (c *DNSClient) Bootstrap(ctx context.Context) error {
   }
   fmt.Printf("%s\n\n", path)
 
-  // TODO: nssupdate the local dns for *.siteX -> mymultihash
+  // nssupdate the local dns for *.siteX -> mymultihash
   c.UpdateMultiHash(c.path[len(c.path)-1])
-
 
   return nil
 }
@@ -114,6 +123,23 @@ func (c *DNSClient) GetValues(ctx context.Context, k key.Key, nvals int) ([]rout
 
 func (c *DNSClient) Provide(ctx context.Context, k key.Key) error {
   log.Debugf("Provide")
+  if false == isASCII(string(k)) {
+   k = key.Key(key.B58KeyEncode(k))
+  }
+
+  results, path, err := c.QueryDNSRecursive(string(k), c.QueryTXT, Bottom2Top)
+  if nil != err {
+    log.Debugf("DNS lookup failed\n")
+    ctx.Done()
+    return errors.New("DNS lookup failed");
+  }
+  fmt.Printf("result: %s\n", results)
+  fmt.Printf("path: %s\n", path)
+
+  update_nodes := c.FindNodesToUpdate(path)
+  fmt.Printf("update: %s\n\n", update_nodes)
+  c.UpdateDNS(string(k), update_nodes)
+
   return nil
 }
 
@@ -215,7 +241,8 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
       }
     }
 
-    // TODO: here we have the opportunity to prefer a local server than a remote one, indeed, not needed if we request from bottom to top
+    // TODO: here we have the opportunity to prefer a local server than a remote one
+    // may be useful only for Top2Bottom requests 
     for _, a := range r.Answer {
       next_server := a.(*dns.A).A.String()
       if next_server == server {
@@ -291,7 +318,7 @@ func (c *DNSClient) UpdateMultiHash(server string) error {
 }
 
 func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
-  if 1 == len(servers) {
+  if 1 >= len(servers) {
     return nil // no need to update only one server
   }
   client := new(dns.Client)
@@ -304,20 +331,29 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     // Extra update (because site1->ip object.site1->other_ip therefore if we request object.site1 we get only other_ip and not the first one)
     // extract the site from object name
     site := strings.Join(strings.Split(fqdn, ".")[1:], ".")
-    fmt.Printf("%s\n", last_server)
     rr, err := c.QueryDNS(client, site, dns.TypeA, last_server)
     if nil != err {
       log.Debugf("Unable to set the path on the last server\n")
       return err
     }
-    dir := rr[0].(*dns.A).A.String()  
-    fmt.Printf("%s\n", dir)
-    if ( dir != prelast_server ) {
+    found := false
+    var dirs []string
+    for _, rrr := range rr {
+      dir := rrr.(*dns.A).A.String() 
+      dirs = append(dirs, dir)
+      if ( dir == prelast_server ) {
+        found = true
+      }
+    }
+
+    if false == found {
       fmt.Printf("Additional update\n")
-      record := fmt.Sprintf("%s. 30 IN A %s", fqdn, dir)
-      err := c.UpdateQueryDNS(client, zone, record, last_server)
-      if nil != err {
-        log.Debugf("%s\n", err)
+      for _, dir := range dirs {
+        record := fmt.Sprintf("%s. 30 IN A %s", fqdn, dir)
+        err := c.UpdateQueryDNS(client, zone, record, last_server)
+        if nil != err {
+          log.Debugf("%s\n", err)
+        }
       }
     }
   } 
@@ -357,7 +393,6 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
   }
   fmt.Printf("result: %s\n", results)
   fmt.Printf("path: %s\n", path)
-  fmt.Printf("update: %s\n\n", c.FindNodesToUpdate(path))
 
   client := new(dns.Client)
   ipfsnodes, err := c.QueryTXT(client, results[0], path[len(path)-1])
