@@ -34,7 +34,7 @@ const (
 	// from the network. This value is specified because the network streams
 	// results.
 	// TODO: if a 'non-nice' strategy is implemented, consider increasing this value
-	maxProvidersPerRequest = 3
+	maxProvidersPerRequest = 1
 	providerRequestTimeout = time.Second * 10
 	hasBlockTimeout        = time.Second * 15
 	provideTimeout         = time.Second * 15
@@ -45,19 +45,19 @@ const (
 
 var (
 	HasBlockBufferSize    = 256
-	provideKeysBufferSize = 2048
-	provideWorkerMax      = 512
+	provideKeysBufferSize = 8192
+	provideWorkerMax      = 2048
 )
 
 func init() {
 	if flags.LowMemMode {
-		HasBlockBufferSize = 64
-		provideKeysBufferSize = 512
+		HasBlockBufferSize = 1024
+		provideKeysBufferSize = 2048
 		provideWorkerMax = 16
 	}
 }
 
-var rebroadcastDelay = delay.Fixed(time.Second * 10)
+var rebroadcastDelay = delay.Fixed(time.Second * 5)
 
 // New initializes a BitSwap instance that communicates over the provided
 // BitSwapNetwork. This function registers the returned instance as the network
@@ -97,7 +97,7 @@ func New(parent context.Context, p peer.ID, network bsnet.BitSwapNetwork,
 	network.SetDelegate(bs)
 
 	// Start up bitswaps async worker routines
-	bs.startWorkers(px, ctx)
+	bs.startWorkers(px, ctx, bs.wm)
 
 	// bind the context and process.
 	// do it over here to avoid closing before all setup is done.
@@ -199,7 +199,9 @@ func (bs *Bitswap) GetBlock(parent context.Context, k key.Key) (blocks.Block, er
 func (bs *Bitswap) WantlistForPeer(p peer.ID) []key.Key {
 	var out []key.Key
 	for _, e := range bs.engine.WantlistForPeer(p) {
-		out = append(out, e.Key)
+		if e.Provider == p {
+			out = append(out, e.Key)
+		}
 	}
 	return out
 }
@@ -300,7 +302,7 @@ func (bs *Bitswap) HasBlock(blk blocks.Block) error {
 	err := bs.tryPutBlock(blk, 4) // attempt to store block up to four times
 	if err != nil {
 		log.Errorf("Error writing block to datastore: %s", err)
-		return err
+//		return err
 	}
 
 	bs.notifications.Publish(blk)

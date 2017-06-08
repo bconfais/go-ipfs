@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	key "github.com/ipfs/go-ipfs/blocks/key"
+	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
 )
 
 type ThreadSafe struct {
@@ -22,7 +23,8 @@ type Wantlist struct {
 type Entry struct {
 	Key      key.Key
 	Priority int
-
+	Provider peer.ID
+	Asked bool
 	RefCnt int
 }
 
@@ -48,6 +50,12 @@ func (w *ThreadSafe) Add(k key.Key, priority int) bool {
 	w.lk.Lock()
 	defer w.lk.Unlock()
 	return w.Wantlist.Add(k, priority)
+}
+
+func (w *ThreadSafe) SetProvForKey(k key.Key, p peer.ID) bool {
+	w.lk.Lock()
+	defer w.lk.Unlock()
+	return w.Wantlist.SetProvForKey(k, p)
 }
 
 func (w *ThreadSafe) AddEntry(e *Entry) bool {
@@ -104,6 +112,19 @@ func (w *Wantlist) Add(k key.Key, priority int) bool {
 
 	return true
 }
+
+func (w *Wantlist) SetProvForKey(k key.Key, p peer.ID) bool {
+	_, ok := w.set[k];
+	if !ok {
+		return false
+	}
+	if "" != w.set[k].Provider {
+		return false
+	}
+	w.set[k].Provider = p
+	return true
+}
+
 
 func (w *Wantlist) AddEntry(e *Entry) bool {
 	if ex, ok := w.set[e.Key]; ok {

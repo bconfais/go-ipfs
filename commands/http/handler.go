@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ipfs/go-ipfs/repo/config"
 	cors "gx/ipfs/QmQzTLDsi3a37CJyMDBXnjiHKQpth3AGS1yqwU57FfLwfG/cors"
@@ -122,6 +123,9 @@ func (i Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (i internalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debug("incoming API request: ", r.URL)
 
+	t := make(chan string, 1)
+	go func() {
+
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("a panic has occurred in the commands handler!")
@@ -194,6 +198,17 @@ func (i internalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// now handle responding to the client properly
 	sendResponse(w, r, res, req)
+	t <- "ok"
+	}()
+	select {
+		case <- t:
+			return
+		case <-time.After(120*time.Second):
+			s := fmt.Sprintf("cmds/http: timeout")
+			http.Error(w, s, http.StatusInternalServerError)
+			return
+	}
+
 }
 
 func guessMimeType(res cmds.Response) (string, error) {

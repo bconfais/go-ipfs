@@ -14,12 +14,12 @@ import (
 	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
 )
 
-var TaskWorkerCount = 8
+var TaskWorkerCount = 100
 
-func (bs *Bitswap) startWorkers(px process.Process, ctx context.Context) {
+func (bs *Bitswap) startWorkers(px process.Process, ctx context.Context, wm *WantManager) {
 	// Start up a worker to handle block requests this node is making
 	px.Go(func(px process.Process) {
-		bs.providerQueryManager(ctx)
+		bs.providerQueryManager(ctx,wm)
 	})
 
 	// Start up workers to handle requests from other nodes for the data on this node
@@ -117,6 +117,7 @@ func (bs *Bitswap) provideWorker(px process.Process) {
 				go limitedGoProvide(k, wid)
 			}
 		}
+//		break
 	}
 }
 
@@ -190,7 +191,7 @@ func (bs *Bitswap) rebroadcastWorker(parent context.Context) {
 	}
 }
 
-func (bs *Bitswap) providerQueryManager(ctx context.Context) {
+func (bs *Bitswap) providerQueryManager(ctx context.Context, wm *WantManager) {
 	var activeLk sync.Mutex
 	kset := key.NewKeySet()
 
@@ -214,6 +215,7 @@ func (bs *Bitswap) providerQueryManager(ctx context.Context) {
 					wg.Add(1)
 					go func(p peer.ID) {
 						defer wg.Done()
+						wm.SetProvForKey(e.Key, p)
 						err := bs.network.ConnectTo(child, p)
 						if err != nil {
 							log.Debug("failed to connect to provider %s: %s", p, err)

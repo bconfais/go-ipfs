@@ -121,6 +121,7 @@ func (m *impl) AddEntry(k key.Key, priority int) {
 }
 
 func (m *impl) addEntry(k key.Key, priority int, cancel bool) {
+//	m.wantlist = make(map[key.Key]Entry)
 	e, exists := m.wantlist[k]
 	if exists {
 		e.Priority = priority

@@ -42,9 +42,11 @@ type Notifier struct {
 // is the same as `Notifier{}`.
 func RateLimited(limit int) Notifier {
 	n := Notifier{}
+/*
 	if limit > 0 {
 		n.lim = ratelimit.NewRateLimiter(process.Background(), limit)
 	}
+*/
 	return n
 }
 

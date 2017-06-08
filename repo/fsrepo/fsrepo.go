@@ -120,6 +120,7 @@ func open(repoPath string) (repo.Repo, error) {
 		return nil, err
 	}
 
+/*
 	r.lockfile, err = lockfile.Lock(r.path)
 	if err != nil {
 		return nil, err
@@ -131,6 +132,7 @@ func open(repoPath string) (repo.Repo, error) {
 			r.lockfile.Close()
 		}
 	}()
+*/
 
 	// Check version, and error out if not matching
 	ver, err := mfsr.RepoPath(r.path).Version()
@@ -161,7 +163,7 @@ func open(repoPath string) (repo.Repo, error) {
 		return nil, err
 	}
 
-	keepLocked = true
+//	keepLocked = true
 	return r, nil
 }
 
@@ -267,7 +269,7 @@ func LockedByOtherProcess(repoPath string) (bool, error) {
 	if locked {
 		log.Debugf("(%t)<->Lock is held at %s", locked, repoPath)
 	}
-	return locked, err
+	return false, err
 }
 
 // APIAddr returns the registered API addr, according to the api file
@@ -384,9 +386,11 @@ func (r *FSRepo) Close() error {
 	// logging.Configure(logging.Output(os.Stderr))
 
 	r.closed = true
+/*
 	if err := r.lockfile.Close(); err != nil {
 		return err
 	}
+*/
 	return nil
 }
 
