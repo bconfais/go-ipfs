@@ -2,9 +2,11 @@ package dnsrouting
 
 import (
   "fmt"
+  "math/rand"
   "net"
   "errors"
   "strings"
+  "time"
   config "github.com/ipfs/go-ipfs/repo/config"
   context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
   dns "github.com/miekg/dns"
@@ -401,7 +403,9 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
     ctx.Done()
     return errors.New("DNS lookup failed");
   }
-  
+
+
+  var pp []*pstore.PeerInfo
   for _, ipfsnode := range ipfsnodes {
     if false == strings.HasPrefix(ipfsnode, "/ip4") {
       continue
@@ -416,11 +420,15 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
 
     p.ID = peer.ID(key.B58KeyDecode(id))
     p.Addrs = append(p.Addrs, paddr)
-    c.peerstore.AddAddrs(p.ID, p.Addrs, pstore.TempAddrTTL)
-    out <- c.peerstore.PeerInfo(p.ID)
+    pp = append(pp, p)
   }
+  s := rand.NewSource(time.Now().Unix())
+  r := rand.New(s)
+  i :=r.Intn(len(pp))
 
-//  c.UpdateDNS(string(k), c.FindNodesToUpdate(path))
+  c.peerstore.AddAddrs(pp[i].ID, pp[i].Addrs, pstore.TempAddrTTL)
+  out <- c.peerstore.PeerInfo(pp[i].ID)
+
   ctx.Done()
   return nil
 
