@@ -11,6 +11,7 @@ import (
   host "gx/ipfs/QmVCe3SNMjkcPgnpFhZs719dheq6xE7gJwjzV7aWcUM4Ms/go-libp2p/p2p/host"
   key "github.com/ipfs/go-ipfs/blocks/key"
   logging "gx/ipfs/QmNQynaz7qfriSUJkiEZUrm2Wen1u3Kj9goZzWtrPyu7XR/go-log"
+  ma "gx/ipfs/QmYzDkkgAEmrcNzFCiYo6L1dTX4EAG1gZkbtdbd9trL4vd/go-multiaddr"
   p2phost "gx/ipfs/QmVCe3SNMjkcPgnpFhZs719dheq6xE7gJwjzV7aWcUM4Ms/go-libp2p/p2p/host"
   peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
   pstore "gx/ipfs/QmQdnfvZQuhdT93LNc5bos52wAmdr3G2p6G8teLJMEN32P/go-libp2p-peerstore"
@@ -83,6 +84,8 @@ func (c *DNSClient) Bootstrap(ctx context.Context) error {
   fmt.Printf("%s\n\n", path)
 
   // TODO: nssupdate the local dns for *.siteX -> mymultihash
+  c.UpdateMultiHash(c.path[len(c.path)-1])
+
 
   return nil
 }
@@ -212,12 +215,6 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
       }
     }
 
-/*
-    for _, a := range r.Ns {
-      fmt.Printf("%v\n", a)
-    }
-*/
-
     // TODO: here we have the opportunity to prefer a local server than a remote one, indeed, not needed if we request from bottom to top
     for _, a := range r.Answer {
       next_server := a.(*dns.A).A.String()
@@ -260,8 +257,45 @@ func (c *DNSClient) FindNodesToUpdate(path []string) []string {
   return results
 }
 
-func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
+func (c *DNSClient) UpdateQueryDNS(client *dns.Client, zone string, record string, server string) error {
+  message := new(dns.Msg)
+  message.SetUpdate(zone)
+  fmt.Printf("%s -> %s\n", record, server)
+  rr, _ := dns.NewRR(record)
+  rrs := make([]dns.RR, 1)
+  rrs[0] = rr
+  message.Insert(rrs)
+  _, _, err := client.Exchange(message, net.JoinHostPort(server, "53"))
+  return err
+}
+
+func (c *DNSClient) UpdateMultiHash(server string) error {
   client := new(dns.Client)
+  zone := fmt.Sprintf("%s.", c.zone)
+  for _, addr :=  range c.host.Addrs() {
+    if strings.HasPrefix(addr.String(), "/ip6") {
+      continue
+    }
+    if strings.HasPrefix(addr.String(), "/ip4/127") {
+      continue
+    }
+    record := fmt.Sprintf("%s 30 IN TXT \"%s/ipfs/%s\"", c.site_fqdn, addr.String(), c.self.Pretty())
+    fmt.Printf("%s\n", record)
+    err := c.UpdateQueryDNS(client, zone, record, server)
+    if nil != err {
+      log.Debugf("*** Error\n")
+    }
+  }
+  return nil
+
+}
+
+func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
+  if 1 == len(servers) {
+    return nil // no need to update only one server
+  }
+  client := new(dns.Client)
+  zone := fmt.Sprintf("%s.", c.zone)
 
   if len(servers) >= 2 {
     last_server := servers[0]
@@ -280,16 +314,8 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     fmt.Printf("%s\n", dir)
     if ( dir != prelast_server ) {
       fmt.Printf("Additional update\n")
-      message := new(dns.Msg)
-      a := fmt.Sprintf("%s.", c.zone)
-      message.SetUpdate(a)
       record := fmt.Sprintf("%s. 30 IN A %s", fqdn, dir)
-      fmt.Printf("%s -> %s\n", record, last_server)
-      rr, _ := dns.NewRR(record)
-      rrs := make([]dns.RR, 1)
-      rrs[0] = rr
-      message.Insert(rrs)
-      _, _, err := client.Exchange(message, net.JoinHostPort(last_server, "53"))
+      err := c.UpdateQueryDNS(client, zone, record, last_server)
       if nil != err {
         log.Debugf("%s\n", err)
       }
@@ -303,16 +329,8 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   for 0 != len(servers) {
     server := (servers)[len(servers)-1]
     servers = (servers)[0:len(servers)-1]
-    message := new(dns.Msg)
-    a := fmt.Sprintf("%s.", c.zone)
-    message.SetUpdate(a)
     record := fmt.Sprintf("%s. 30 IN %s %s", fqdn, type_, value)
-    fmt.Printf("%s -> %s\n", record, server)
-    rr, _ := dns.NewRR(record)
-    rrs := make([]dns.RR, 1)
-    rrs[0] = rr
-    message.Insert(rrs)
-    _, _, err := client.Exchange(message, net.JoinHostPort(server, "53"))
+    err := c.UpdateQueryDNS(client, zone, record, server)
     if nil != err {
       log.Debugf("%s\n", err)
     }
@@ -328,16 +346,46 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
 
 func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan pstore.PeerInfo) error {
   log.Debugf("FindProvidersAsync_")
-  results, path, error := c.QueryDNSRecursive(string(k), c.QueryTXT, Bottom2Top)
-  if nil != error {
+  defer close(out)
+
+
+  results, path, err := c.QueryDNSRecursive(string(k), c.QueryTXT, Bottom2Top)
+  if nil != err {
     log.Debugf("DNS lookup failed\n")
     ctx.Done()
     return errors.New("DNS lookup failed");
   }
-  fmt.Printf("%s\n", results)
-  fmt.Printf("%s\n", path)
-  fmt.Printf("%s\n\n", c.FindNodesToUpdate(path))
-  c.UpdateDNS(string(k), c.FindNodesToUpdate(path))
+  fmt.Printf("result: %s\n", results)
+  fmt.Printf("path: %s\n", path)
+  fmt.Printf("update: %s\n\n", c.FindNodesToUpdate(path))
+
+  client := new(dns.Client)
+  ipfsnodes, err := c.QueryTXT(client, results[0], path[len(path)-1])
+  if nil != err {
+    log.Debugf("DNS lookup failed\n")
+    ctx.Done()
+    return errors.New("DNS lookup failed");
+  }
+  
+  for _, ipfsnode := range ipfsnodes {
+    if false == strings.HasPrefix(ipfsnode, "/ip4") {
+      continue
+    }
+    ipfsnode_ := strings.Split(ipfsnode, "/")
+    id := ipfsnode_[len(ipfsnode_)-1]
+    addr := strings.Join(ipfsnode_[:len(ipfsnode_)-2], "/")
+    fmt.Printf("%s -> %s %s\n", ipfsnode, id, addr)
+
+    p := new(pstore.PeerInfo)
+    paddr, _ := ma.NewMultiaddr(addr)
+
+    p.ID = peer.ID(key.B58KeyDecode(id))
+    p.Addrs = append(p.Addrs, paddr)
+    c.peerstore.AddAddrs(p.ID, p.Addrs, pstore.TempAddrTTL)
+    out <- c.peerstore.PeerInfo(p.ID)
+  }
+
+//  c.UpdateDNS(string(k), c.FindNodesToUpdate(path))
   ctx.Done()
   return nil
 
