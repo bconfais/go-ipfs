@@ -56,15 +56,8 @@ func (b *arccache) hasCached(k key.Key) (has bool, ok bool) {
 }
 
 func (b *arccache) Has(k key.Key) (bool, error) {
-/*
-	if has, ok := b.hasCached(k); ok {
-		return has, nil
-	}
-*/
 	res, err := b.blockstore.Has(k)
-	if err == nil {
-		b.arc.Add(k, res)
-	}
+ 	return res, err
 }
 
 func (b *arccache) Get(k key.Key) (blocks.Block, error) {
