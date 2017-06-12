@@ -57,7 +57,7 @@ func init() {
 	}
 }
 
-var rebroadcastDelay = delay.Fixed(time.Second * 5)
+var rebroadcastDelay = delay.Fixed(time.Second * 3)
 
 // New initializes a BitSwap instance that communicates over the provided
 // BitSwapNetwork. This function registers the returned instance as the network
