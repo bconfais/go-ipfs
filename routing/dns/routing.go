@@ -308,6 +308,9 @@ func (c *DNSClient) UpdateMultiHash(server string) error {
     if strings.HasPrefix(addr.String(), "/ip4/127") {
       continue
     }
+    if strings.HasPrefix(addr.String(), "/ip4/172") { // grid5000 specific
+      continue
+    }
     record := fmt.Sprintf("%s 30 IN TXT \"%s/ipfs/%s\"", c.site_fqdn, addr.String(), c.self.Pretty())
     fmt.Printf("%s\n", record)
     err := c.UpdateQueryDNS(client, zone, record, server)
