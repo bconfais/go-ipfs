@@ -420,6 +420,9 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
     ctx.Done()
     return errors.New("DNS lookup failed");
   }
+  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+  defer f.Close()
+  f.WriteString(fmt.Sprintf("endlookup (%s)\n", string(k)))
 
 
   var pp []*pstore.PeerInfo
