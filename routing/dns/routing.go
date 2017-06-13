@@ -341,10 +341,37 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
 
   nb_hops := 0
 
+/* the idea is that if the last server has more than two answers, we do not have a wildcard */
+  if len(servers) >= 2 {
+    last_server := servers[0]
+    // Extra update (because site1->ip object.site1->other_ip therefore if we request object.site1 we get only other_ip and not the first one)
+    // extract the site from object name
+    rr, err := c.QueryDNS(client, fqdn, dns.TypeA, last_server)
+    if nil != err {
+      log.Debugf("Unable to set the path on the last server\n")
+      return err
+    }
+    if len(rr) >= 2 {
+      fmt.Printf("already in extension (%s)\n", fqdn)
+    } else {
+      for _, rrr := range rr {
+        dir := rrr.(*dns.A).A.String() 
+        record := fmt.Sprintf("%s. 30 IN A %s", fqdn, dir)
+        nb_hops = nb_hops+1
+        err := c.UpdateQueryDNS(client, zone, record, last_server)
+        if nil != err {
+          log.Debugf("%s\n", err)
+        }
+      }
+    }
+  } 
+  
+
+/* the idea is that site1.example.com gives the prelast server answer */
+/*
   if len(servers) >= 2 {
     last_server := servers[0]
     prelast_server := servers[1]
-
     // Extra update (because site1->ip object.site1->other_ip therefore if we request object.site1 we get only other_ip and not the first one)
     // extract the site from object name
     site := strings.Join(strings.Split(fqdn, ".")[1:], ".")
@@ -354,10 +381,6 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
       return err
     }
     found := false
-    if len(rr) >= 2 {
-      log.Debugf("Record (%s) already in extension\n", fqdn)
-      found = true; // the record was already set by extension
-    }
     var dirs []string
     for _, rrr := range rr {
       dir := rrr.(*dns.A).A.String() 
@@ -366,7 +389,6 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
         found = true
       }
     }
-
     if false == found {
       fmt.Printf("Additional update\n")
       for _, dir := range dirs {
@@ -379,7 +401,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
       }
     }
   } 
-
+*/
 
   type_ := "TXT"
   value := c.site_fqdn
