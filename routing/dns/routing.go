@@ -194,6 +194,9 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
   message.SetQuestion(dns.Fqdn(fqdn), dns.TypeA)
   message.RecursionDesired = false
 
+  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+  defer f.Close()
+
   var servers []string // a stack of partial answers
   if Bottom2Top == direction {
     servers = make([]string, len(c.path))
@@ -234,6 +237,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
       continue
     }
     if 0 == len(r.Answer) {
+      f.WriteString(fmt.Sprintf("found %d answers (%s)\n", len(r.Answer), fqdn))
       fmt.Printf("no answer from %s\n", server)
       res, error := callback(client, fqdn, server)
       results = res 
@@ -248,6 +252,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
 
     // TODO: here we have the opportunity to prefer a local server than a remote one
     // may be useful only for Top2Bottom requests 
+    f.WriteString(fmt.Sprintf("found %d answers (%s)\n", len(r.Answer), fqdn))
     for _, a := range r.Answer {
       next_server := a.(*dns.A).A.String()
       if next_server == server {
@@ -270,8 +275,6 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
     return nil, nil, errors.New("Value not found in DNS")
   }
 
-  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-  defer f.Close()
   f.WriteString(fmt.Sprintf("lookup %d hops (%s)\n", nb_hops, fqdn))
   //ioutil.WriteFile("/tmp/log", fmt.SPrintf("lookup %d hops (%s)\n", nb_hops, fqdn), 0644)
   return results, path, nil
@@ -422,6 +425,7 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
   }
   f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
   defer f.Close()
+  f.WriteString(fmt.Sprintf("endfound %d answers (%s)\n", len(ipfsnodes), string(k)))
   f.WriteString(fmt.Sprintf("endlookup (%s)\n", string(k)))
 
 
