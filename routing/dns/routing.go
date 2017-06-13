@@ -354,6 +354,10 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
       return err
     }
     found := false
+    if len(rr) >= 2 {
+      log.Debugf("Record (%s) already in extension\n", fqdn)
+      found = true; // the record was already set by extension
+    }
     var dirs []string
     for _, rrr := range rr {
       dir := rrr.(*dns.A).A.String() 
