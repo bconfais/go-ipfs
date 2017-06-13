@@ -2,7 +2,8 @@ package dht
 
 import (
 	"sync"
-
+	"io/ioutil"
+	"fmt"
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	notif "github.com/ipfs/go-ipfs/notifications"
 	"github.com/ipfs/go-ipfs/routing"
@@ -38,6 +39,7 @@ type dhtQueryResult struct {
 
 // constructs query
 func (dht *IpfsDHT) newQuery(k key.Key, f queryFunc) *dhtQuery {
+	ioutil.WriteFile("/tmp/log", []byte(fmt.Sprintf("query %s\n", string(k))), 0644)
 	return &dhtQuery{
 		key:         k,
 		dht:         dht,
@@ -152,6 +154,8 @@ func (r *dhtQueryRunner) Run(ctx context.Context, peers []peer.ID) (*dhtQueryRes
 		defer r.RUnlock()
 		err = context.DeadlineExceeded
 	}
+
+	ioutil.WriteFile("/tmp/log", []byte(fmt.Sprintf("lookup %d hops (%s)\n", r.peersSeen.Size(), string(r.query.key))), 0644)
 
 	if r.result != nil && r.result.success {
 		return r.result, nil
