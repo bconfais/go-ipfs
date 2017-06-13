@@ -2,6 +2,7 @@ package dnsrouting
 
 import (
   "fmt"
+  "os"
   "math/rand"
   "net"
   "errors"
@@ -208,6 +209,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
   var results []string
 
   found := false
+  nb_hops := 0
 
   for 0 != len(servers) && false == found {
     server := (servers)[len(servers)-1]
@@ -216,6 +218,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
     path = append(path, server)
 
     log.Debugf("Query %s\n", server)
+    nb_hops = nb_hops + 1
 
     r, _, err := client.Exchange(message, net.JoinHostPort(server, "53"))
     if r == nil {
@@ -267,6 +270,10 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
     return nil, nil, errors.New("Value not found in DNS")
   }
 
+  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+  defer f.Close()
+  f.WriteString(fmt.Sprintf("lookup %d hops (%s)\n", nb_hops, fqdn))
+  //ioutil.WriteFile("/tmp/log", fmt.SPrintf("lookup %d hops (%s)\n", nb_hops, fqdn), 0644)
   return results, path, nil
 }
 
@@ -329,6 +336,8 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   client := new(dns.Client)
   zone := fmt.Sprintf("%s.", c.zone)
 
+  nb_hops := 0
+
   if len(servers) >= 2 {
     last_server := servers[0]
     prelast_server := servers[1]
@@ -355,6 +364,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
       fmt.Printf("Additional update\n")
       for _, dir := range dirs {
         record := fmt.Sprintf("%s. 30 IN A %s", fqdn, dir)
+        nb_hops = nb_hops+1
         err := c.UpdateQueryDNS(client, zone, record, last_server)
         if nil != err {
           log.Debugf("%s\n", err)
@@ -371,6 +381,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     server := (servers)[len(servers)-1]
     servers = (servers)[0:len(servers)-1]
     record := fmt.Sprintf("%s. 30 IN %s %s", fqdn, type_, value)
+    nb_hops = nb_hops+1
     err := c.UpdateQueryDNS(client, zone, record, server)
     if nil != err {
       log.Debugf("%s\n", err)
@@ -379,7 +390,10 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     value = server
   }
 
-
+  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+  defer f.Close()
+  f.WriteString(fmt.Sprintf("update %d messages (%s)\n", nb_hops, fqdn))
+  //ioutil.WriteFile("/tmp/log", fmt.Sprintf("update %d messages (%s)\n", nb_hops, fqdn), 0644)
   return nil
 
 }
