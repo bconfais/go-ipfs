@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"os"
 
 	pb "github.com/ipfs/go-ipfs/routing/dht/pb"
 	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
@@ -93,6 +94,9 @@ func (dht *IpfsDHT) sendRequest(ctx context.Context, p peer.ID, pmes *pb.Message
 
 // sendMessage sends out a message
 func (dht *IpfsDHT) sendMessage(ctx context.Context, p peer.ID, pmes *pb.Message) error {
+	ff, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+	defer ff.Close()
+	ff.WriteString(fmt.Sprintf("update\n"))
 
 	ms := dht.messageSenderForPeer(p)
 
@@ -141,6 +145,9 @@ func (ms *messageSender) prep() error {
 		return nil
 	}
 
+	ff, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+	defer ff.Close()
+	ff.WriteString(fmt.Sprintf("new stream\n"))
 	nstr, err := ms.dht.host.NewStream(ms.dht.ctx, ProtocolDHT, ms.p)
 	if err != nil {
 		return err
