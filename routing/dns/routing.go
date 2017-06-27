@@ -253,6 +253,10 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
     // TODO: here we have the opportunity to prefer a local server than a remote one
     // may be useful only for Top2Bottom requests 
     f.WriteString(fmt.Sprintf("found %d answers (%s)\n", len(r.Answer), fqdn))
+    for i := range r.Answer {
+      j := rand.Intn(i + 1)
+      r.Answer[i], r.Answer[j] = r.Answer[j], r.Answer[i]
+    }
     for _, a := range r.Answer {
       next_server := a.(*dns.A).A.String()
       if next_server == server {
