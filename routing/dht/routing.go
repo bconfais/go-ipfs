@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"sync"
 	"time"
+	"os"
 
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	notif "github.com/ipfs/go-ipfs/notifications"
@@ -314,21 +315,28 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 
 	ps := pset.NewLimited(count)
 	provs := dht.providers.GetProviders(ctx, key)
+	answer := 0
+	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+	defer f.Close()
 	for _, p := range provs {
+		answer = answer + 1
 		// NOTE: Assuming that this list of peers is unique
 		if ps.TryAdd(p) {
 			select {
 			case peerOut <- dht.peerstore.PeerInfo(p):
 			case <-ctx.Done():
+				f.WriteString(fmt.Sprintf("found %d answers (%s)\n", answer, string(key)))
 				return
 			}
 		}
 
 		// If we have enough peers locally, dont bother with remote RPC
 		if ps.Size() >= count {
+			f.WriteString(fmt.Sprintf("found %d answers (%s)\n", answer, string(key)))
 			return
 		}
 	}
+	f.WriteString(fmt.Sprintf("found %d answers (%s)\n", answer, string(key)))
 
 	// setup the Query
 	parent := ctx
