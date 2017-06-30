@@ -48,12 +48,15 @@ func NewRoutingTable(bucketsize int, localID ID, latency time.Duration, m pstore
 // Update adds or moves the given peer to the front of its respective bucket
 // If a peer gets removed from a bucket, it is returned
 func (rt *RoutingTable) Update(p peer.ID) {
+	fmt.Printf("Routing Table, bs = %d (%d, %d), Max latency = %d\n", rt.bucketsize, rt.Buckets[0].Len(), rt.Size(), rt.maxLatency)
+
 	peerID := ConvertPeerID(p)
 	cpl := commonPrefixLen(peerID, rt.local)
 
 	rt.tabLock.Lock()
 	defer rt.tabLock.Unlock()
 	bucketID := cpl
+
 	if bucketID >= len(rt.Buckets) {
 		bucketID = len(rt.Buckets) - 1
 	}
@@ -67,16 +70,24 @@ func (rt *RoutingTable) Update(p peer.ID) {
 		return
 	}
 
+/*
 	if rt.metrics.LatencyEWMA(p) > rt.maxLatency {
 		// Connection doesnt meet requirements, skip!
 		return
 	}
+*/
 
 	// New peer, add to bucket
+	if bucket.Len() >= rt.bucketsize {
+		return
+	}
 	bucket.PushFront(p)
 
 	// Are we past the max bucket size?
 	if bucket.Len() > rt.bucketsize {
+		return
+	}
+/*
 		// If this bucket is the rightmost bucket, and its full
 		// we need to split it and create a new bucket
 		if bucketID == len(rt.Buckets)-1 {
@@ -88,6 +99,7 @@ func (rt *RoutingTable) Update(p peer.ID) {
 			return
 		}
 	}
+*/
 }
 
 // Remove deletes a peer from the routing table. This is to be used
@@ -108,6 +120,7 @@ func (rt *RoutingTable) Remove(p peer.ID) {
 }
 
 func (rt *RoutingTable) nextBucket() peer.ID {
+//	return ""
 	bucket := rt.Buckets[len(rt.Buckets)-1]
 	newBucket := bucket.Split(len(rt.Buckets)-1, rt.local)
 	rt.Buckets = append(rt.Buckets, newBucket)
@@ -144,15 +157,25 @@ func (rt *RoutingTable) NearestPeer(id ID) peer.ID {
 
 // NearestPeers returns a list of the 'count' closest peers to the given ID
 func (rt *RoutingTable) NearestPeers(id ID, count int) []peer.ID {
+	fmt.Printf("Routing Table, bs = %d (%d, %d), Max latency = %d\n", rt.bucketsize, rt.Buckets[0].Len(), rt.Size(), rt.maxLatency)
+
 	cpl := commonPrefixLen(id, rt.local)
 
 	rt.tabLock.RLock()
 
 	// Get bucket at cpl index or last bucket
 	var bucket *Bucket
+	fmt.Printf("cpl %d\n", cpl)
+
 	if cpl >= len(rt.Buckets) {
 		cpl = len(rt.Buckets) - 1
 	}
+
+/*
+	if cpl >= RoutingLength {
+		cpl = RoutingLength - 1
+	}
+*/
 	bucket = rt.Buckets[cpl]
 
 	var peerArr peerSorterArr
@@ -208,7 +231,7 @@ func (rt *RoutingTable) ListPeers() []peer.ID {
 
 // Print prints a descriptive statement about the provided RoutingTable
 func (rt *RoutingTable) Print() {
-	fmt.Printf("Routing Table, bs = %d, Max latency = %d\n", rt.bucketsize, rt.maxLatency)
+	fmt.Printf("Routing Table, bs = %d (%d, %d), Max latency = %d\n", rt.bucketsize, rt.Buckets[0].Len(), rt.Size(), rt.maxLatency)
 	rt.tabLock.RLock()
 
 	for i, b := range rt.Buckets {

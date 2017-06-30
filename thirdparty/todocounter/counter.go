@@ -48,7 +48,7 @@ type Counter interface {
 	// Incrememnt adds a number of todos to track.
 	// If the counter is **below** zero, it panics.
 	Increment(i uint32)
-
+	Value() int32
 	// Decrement removes a number of todos to track.
 	// If the count drops to zero, signals done and destroys the counter.
 	// If the count drops **below** zero, panics. It means you have tried to remove
@@ -76,6 +76,9 @@ func NewSyncCounter() Counter {
 	return &todoCounter{
 		done: make(chan struct{}),
 	}
+}
+func (c *todoCounter) Value() int32 {
+	return c.count
 }
 
 func (c *todoCounter) Increment(i uint32) {

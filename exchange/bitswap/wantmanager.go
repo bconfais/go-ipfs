@@ -358,6 +358,9 @@ func (wm *WantManager) newMsgQueue(p peer.ID) *msgQueue {
 }
 
 func (mq *msgQueue) addMessage(entries []*bsmsg.Entry) {
+	if nil == mq {
+		return;
+	}
 	mq.outlk.Lock()
 	defer func() {
 		mq.outlk.Unlock()
