@@ -7,8 +7,6 @@ import (
 	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
 )
 
-var RoutingLength = 3
-
 // Bucket holds a list of peers.
 type Bucket struct {
 	lk   sync.RWMutex
@@ -65,10 +63,6 @@ func (b *Bucket) MoveToFront(id peer.ID) {
 
 func (b *Bucket) PushFront(p peer.ID) {
 	b.lk.Lock()
-	if b.list.Len() >= RoutingLength {
-		b.lk.Unlock()
-		return
-	}
 	b.list.PushFront(p)
 	b.lk.Unlock()
 }

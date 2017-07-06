@@ -158,7 +158,7 @@ func (r *dhtQueryRunner) Run(ctx context.Context, peers []peer.ID) (*dhtQueryRes
 	}
 	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
 	defer f.Close()
-	f.WriteString(fmt.Sprintf("lookup %d hops %d (%s)\n", r.peersSeen.Size(), r.peersRemaining.Value(), string(r.query.key)))
+	f.WriteString(fmt.Sprintf("lookup %d hops (%s)\n", r.peersSeen.Size(), string(r.query.key)))
 
 	if r.result != nil && r.result.success {
 		return r.result, nil
@@ -168,7 +168,6 @@ func (r *dhtQueryRunner) Run(ctx context.Context, peers []peer.ID) (*dhtQueryRes
 }
 
 func (r *dhtQueryRunner) addPeerToQuery(next peer.ID) {
-	fmt.Printf("addpeertoquery\n")
 	// if new peer is ourselves...
 	if next == r.query.dht.self {
 		r.log.Debug("addPeerToQuery skip self")

@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"sync"
 	"time"
-//	"os"
+	"os"
 
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	notif "github.com/ipfs/go-ipfs/notifications"
@@ -244,7 +244,6 @@ func (dht *IpfsDHT) GetValues(ctx context.Context, key key.Key, nvals int) ([]ro
 // Provide makes this node announce that it can provide a value for the given key
 func (dht *IpfsDHT) Provide(ctx context.Context, key key.Key) error {
 	defer log.EventBegin(ctx, "provide", &key).Done()
-	fmt.Printf("Provide\n")
 
 	// add self locally
 	dht.providers.AddProvider(ctx, key, dht.self)
@@ -293,7 +292,6 @@ func (dht *IpfsDHT) makeProvRecord(skey key.Key) (*pb.Message, error) {
 
 // FindProviders searches until the context expires.
 func (dht *IpfsDHT) FindProviders(ctx context.Context, key key.Key) ([]pstore.PeerInfo, error) {
-	fmt.Printf("FindProviders\n")
 	var providers []pstore.PeerInfo
 	for p := range dht.FindProvidersAsync(ctx, key, KValue) {
 		providers = append(providers, p)
@@ -305,7 +303,6 @@ func (dht *IpfsDHT) FindProviders(ctx context.Context, key key.Key) ([]pstore.Pe
 // Peers will be returned on the channel as soon as they are found, even before
 // the search query completes.
 func (dht *IpfsDHT) FindProvidersAsync(ctx context.Context, key key.Key, count int) <-chan pstore.PeerInfo {
-	fmt.Printf("FindProvidersAsync\n")
 	log.Event(ctx, "findProviders", &key)
 	peerOut := make(chan pstore.PeerInfo, count)
 	go dht.findProvidersAsyncRoutine(ctx, key, count, peerOut)
@@ -317,11 +314,10 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 	defer close(peerOut)
 
 	ps := pset.NewLimited(count)
-//	provs := dht.providers.GetProviders(ctx, key)
-//	answer := 0
-//	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-//	defer f.Close()
-/*
+	provs := dht.providers.GetProviders(ctx, key)
+	answer := 0
+	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+	defer f.Close()
 	for _, p := range provs {
 		answer = answer + 1
 		// NOTE: Assuming that this list of peers is unique
@@ -341,7 +337,6 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 		}
 	}
 	f.WriteString(fmt.Sprintf("found %d answers (%s)\n", answer, string(key)))
-*/
 
 	// setup the Query
 	parent := ctx
