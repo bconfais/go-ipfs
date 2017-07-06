@@ -42,6 +42,16 @@ type DNSClient struct {
   path []string
 }
 
+func in_slice(a string, list []string) bool {
+    for _, b := range list {
+        if b == a {
+            return true
+        }
+    }
+    return false
+}
+
+
 func reverse(ss []string) {
   last := len(ss) - 1
   for i := 0; i < len(ss)/2; i++ {
@@ -110,6 +120,9 @@ func (c *DNSClient) FindPeer(ctx context.Context, _ peer.ID) (pstore.PeerInfo, e
 func (c *DNSClient) FindProvidersAsync(ctx context.Context, k key.Key, count int) <-chan pstore.PeerInfo {
   log.Debugf("FindProvidersAsync")
   out := make(chan pstore.PeerInfo, count)
+  if (strings.HasPrefix(string(k), "Qm")) {
+    return nil
+  }
   go c.FindProvidersAsync_(ctx, k, out)
   return out
 }
@@ -189,6 +202,8 @@ func (c *DNSClient) QueryTXT(client *dns.Client, fqdn string, resolver string) (
 
 func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, string, string)([]string, error), direction int) ([]string, []string, error) {
   client := new(dns.Client)
+  client.Timeout = 30*time.Second
+  client.Net = "tcp"
 
   message := new(dns.Msg)
   message.SetQuestion(dns.Fqdn(fqdn), dns.TypeA)
@@ -209,19 +224,25 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
   fmt.Printf("%s\n\n", servers)
 
   var path []string
+  var trypath []string
   var results []string
 
   found := false
   nb_hops := 0
-
+  retry := 0
   for 0 != len(servers) && false == found {
     server := (servers)[len(servers)-1]
     servers = (servers)[0:len(servers)-1]
 
-    path = append(path, server)
+    if (in_slice(server, path))  {
+      log.Debugf("server %s already in %s\n", server, path)
+      continue;
+    }
 
-    log.Debugf("Query %s\n", server)
+    path = append(path, server)
+    trypath = append(trypath, server)
     nb_hops = nb_hops + 1
+    log.Debugf("Query %s\n", server)
 
     r, _, err := client.Exchange(message, net.JoinHostPort(server, "53"))
     if r == nil {
@@ -231,11 +252,19 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
       continue
     }
     if r.Rcode != dns.RcodeSuccess {
-      log.Debugf("**** invalid answer name %s after query for %s\n", fqdn, fqdn)
-      log.Debugf("**** Object does not exist, perhaps try another path in the DNS\n");
+      retry = retry +1
+      if ( retry  < 0 && len(path) > 1 ) {
+       nb_hops = nb_hops - 1
+       servers = append(servers, server)
+       log.Debugf("*** retry %d for %s\n", retry, fqdn)
+      } else {
+        log.Debugf("**** invalid answer name %s after query for %s\n", fqdn, fqdn)
+        log.Debugf("**** Object does not exist, perhaps try another path in the DNS\n");
+      }
       path = (path)[0:len(path)-1]
       continue
     }
+    retry = 0
     if 0 == len(r.Answer) {
       f.WriteString(fmt.Sprintf("found %d answers (%s)\n", len(r.Answer), fqdn))
       fmt.Printf("no answer from %s\n", server)
@@ -279,14 +308,14 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
     return nil, nil, errors.New("Value not found in DNS")
   }
 
-  f.WriteString(fmt.Sprintf("lookup %d hops (%s)\n", nb_hops, fqdn))
+  f.WriteString(fmt.Sprintf("lookup %d hops (%s) %s\n", nb_hops, fqdn, trypath))
   //ioutil.WriteFile("/tmp/log", fmt.SPrintf("lookup %d hops (%s)\n", nb_hops, fqdn), 0644)
   return results, path, nil
 }
 
 func (c *DNSClient) FindNodesToUpdate(path []string) []string {
   // the idea is that we need to update all nodes until the "common root" between the path to the object and the 
-  common_root := path[0]
+  common_root := path[0] /* path [10.158.0.28 10.158.0.17] -- c.path [10.158.0.27 10.158.0.28 10.158.0.23] */
   found := false
   var results []string
   for _, el := range c.path {
@@ -297,23 +326,49 @@ func (c *DNSClient) FindNodesToUpdate(path []string) []string {
       results = append(results, el)
     }
   }
-  return results
+  fmt.Printf("%s -- %s\n", path, c.path)
+  fmt.Printf("%s\n\n", results)
+  return results;
 }
 
 func (c *DNSClient) UpdateQueryDNS(client *dns.Client, zone string, record string, server string) error {
-  message := new(dns.Msg)
-  message.SetUpdate(zone)
-  fmt.Printf("%s -> %s\n", record, server)
-  rr, _ := dns.NewRR(record)
-  rrs := make([]dns.RR, 1)
-  rrs[0] = rr
-  message.Insert(rrs)
-  _, _, err := client.Exchange(message, net.JoinHostPort(server, "53"))
-  return err
+  retry := 0
+  for (retry < 10) {
+    retry = retry + 1
+    message := new(dns.Msg)
+    message.SetUpdate(zone)
+    fmt.Printf("%s -> %s\n", record, server)
+    rr, _ := dns.NewRR(record)
+    rrs := make([]dns.RR, 1)
+    rrs[0] = rr
+    message.Insert(rrs)
+    r, _, err := client.Exchange(message, net.JoinHostPort(server, "53"))
+    if err != nil {
+      f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+      defer f.Close()
+      f.WriteString(fmt.Sprintf("Error updating %s %s %s (error)\n", err, record, server))
+      log.Debugf("Error update %s %s %s (error)\n", err, record, server)
+      time.Sleep(time.Duration(2*retry)*time.Second)
+      continue
+    }
+    if r.Rcode != dns.RcodeSuccess {
+      f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+      defer f.Close()
+      f.WriteString(fmt.Sprintf("Error updating %s %s %s (no success)\n", err, record, server))
+      log.Debugf("Error update %s %s %s (no success)\n", err, record, server)
+      time.Sleep(time.Duration(2*retry)*time.Second)
+      continue
+    }
+    return nil
+  }
+  return errors.New("Too many errors while updating")
 }
 
 func (c *DNSClient) UpdateMultiHash(server string) error {
   client := new(dns.Client)
+  client.Timeout = 30*time.Second
+  client.Net = "tcp"
+
   zone := fmt.Sprintf("%s.", c.zone)
   for _, addr :=  range c.host.Addrs() {
     if strings.HasPrefix(addr.String(), "/ip6") {
@@ -325,7 +380,7 @@ func (c *DNSClient) UpdateMultiHash(server string) error {
     if strings.HasPrefix(addr.String(), "/ip4/172") { // grid5000 specific
       continue
     }
-    record := fmt.Sprintf("%s 30 IN TXT \"%s/ipfs/%s\"", c.site_fqdn, addr.String(), c.self.Pretty())
+    record := fmt.Sprintf("%s 300 IN TXT \"%s/ipfs/%s\"", c.site_fqdn, addr.String(), c.self.Pretty())
     fmt.Printf("%s\n", record)
     err := c.UpdateQueryDNS(client, zone, record, server)
     if nil != err {
@@ -338,9 +393,15 @@ func (c *DNSClient) UpdateMultiHash(server string) error {
 
 func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   if 1 >= len(servers) {
-    return nil // no need to update only one server
+    f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+    defer f.Close()
+    f.WriteString(fmt.Sprintf("no need to update %s\n", fqdn))
+    return nil // no need to update only one server that is local to the site
   }
   client := new(dns.Client)
+  client.Timeout = 30*time.Second
+  client.Net = "tcp"
+
   zone := fmt.Sprintf("%s.", c.zone)
 
   nb_hops := 0
@@ -360,7 +421,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     } else {
       for _, rrr := range rr {
         dir := rrr.(*dns.A).A.String() 
-        record := fmt.Sprintf("%s. 30 IN A %s", fqdn, dir)
+        record := fmt.Sprintf("%s. 1 IN A %s", fqdn, dir)
         nb_hops = nb_hops+1
         err := c.UpdateQueryDNS(client, zone, record, last_server)
         if nil != err {
@@ -396,7 +457,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     if false == found {
       fmt.Printf("Additional update\n")
       for _, dir := range dirs {
-        record := fmt.Sprintf("%s. 30 IN A %s", fqdn, dir)
+        record := fmt.Sprintf("%s. 1 IN A %s", fqdn, dir)
         nb_hops = nb_hops+1
         err := c.UpdateQueryDNS(client, zone, record, last_server)
         if nil != err {
@@ -413,7 +474,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   for 0 != len(servers) {
     server := (servers)[len(servers)-1]
     servers = (servers)[0:len(servers)-1]
-    record := fmt.Sprintf("%s. 30 IN %s %s", fqdn, type_, value)
+    record := fmt.Sprintf("%s. 1 IN %s %s", fqdn, type_, value)
     nb_hops = nb_hops+1
     err := c.UpdateQueryDNS(client, zone, record, server)
     if nil != err {
@@ -447,6 +508,9 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
   fmt.Printf("path: %s\n", path)
 
   client := new(dns.Client)
+  client.Timeout = 30*time.Second
+  client.Net = "tcp"
+
   ipfsnodes, err := c.QueryTXT(client, results[0], path[len(path)-1])
   if nil != err {
     log.Debugf("DNS lookup failed\n")
