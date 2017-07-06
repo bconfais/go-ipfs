@@ -8,6 +8,7 @@ import (
   "errors"
   "strings"
   "time"
+  syncmap "golang.org/x/sync/syncmap"
   config "github.com/ipfs/go-ipfs/repo/config"
   context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
   dns "github.com/miekg/dns"
@@ -23,6 +24,7 @@ import (
 )
 var log = logging.Logger("routing/dns")
 
+var cache = new(syncmap.Map)
 const (
   Bottom2Top = 0
   Top2Bottom = 1
@@ -187,6 +189,12 @@ func (c *DNSClient) QueryDNS(client *dns.Client, fqdn string, type_ uint16, reso
 }
 
 func (c *DNSClient) QueryTXT(client *dns.Client, fqdn string, resolver string) ([]string, error) {
+  val, ok := cache.Load(fqdn)
+  val_, ok_ := val.([]string)
+  if ok && ok_ {
+    return val_, nil
+  }
+
   rr, error := c.QueryDNS(client, fqdn, dns.TypeTXT, resolver)
   if nil != error {
     return nil, error
@@ -196,6 +204,7 @@ func (c *DNSClient) QueryTXT(client *dns.Client, fqdn string, resolver string) (
     res := a.(*dns.TXT).Txt[0]
     results = append(results, res)
   }
+  cache.Store(fqdn, results)
   return results, nil
 }
 
@@ -203,6 +212,9 @@ func (c *DNSClient) QueryTXT(client *dns.Client, fqdn string, resolver string) (
 func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, string, string)([]string, error), direction int) ([]string, []string, error) {
   client := new(dns.Client)
   client.Timeout = 30*time.Second
+  client.ReadTimeout = 30*time.Second
+  client.WriteTimeout = 30*time.Second
+  client.DialTimeout = 30*time.Second
   client.Net = "tcp"
 
   message := new(dns.Msg)
@@ -253,7 +265,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, callback func(*dns.Client, st
     }
     if r.Rcode != dns.RcodeSuccess {
       retry = retry +1
-      if ( retry  < 0 && len(path) > 1 ) {
+      if ( retry < 0 && len(path) > 1 ) {
        nb_hops = nb_hops - 1
        servers = append(servers, server)
        log.Debugf("*** retry %d for %s\n", retry, fqdn)
@@ -331,9 +343,16 @@ func (c *DNSClient) FindNodesToUpdate(path []string) []string {
   return results;
 }
 
-func (c *DNSClient) UpdateQueryDNS(client *dns.Client, zone string, record string, server string) error {
+func (c *DNSClient) UpdateQueryDNS(clientc *dns.Client, zone string, record string, server string) error {
+
   retry := 0
   for (retry < 10) {
+  client := new(dns.Client)
+  client.Timeout = 5*time.Second
+  client.ReadTimeout = 5*time.Second
+  client.WriteTimeout = 5*time.Second
+  client.DialTimeout = 5*time.Second
+  client.Net = "tcp"
     retry = retry + 1
     message := new(dns.Msg)
     message.SetUpdate(zone)
@@ -348,7 +367,7 @@ func (c *DNSClient) UpdateQueryDNS(client *dns.Client, zone string, record strin
       defer f.Close()
       f.WriteString(fmt.Sprintf("Error updating %s %s %s (error)\n", err, record, server))
       log.Debugf("Error update %s %s %s (error)\n", err, record, server)
-      time.Sleep(time.Duration(2*retry)*time.Second)
+      time.Sleep(time.Duration(retry)*time.Second)
       continue
     }
     if r.Rcode != dns.RcodeSuccess {
@@ -356,7 +375,7 @@ func (c *DNSClient) UpdateQueryDNS(client *dns.Client, zone string, record strin
       defer f.Close()
       f.WriteString(fmt.Sprintf("Error updating %s %s %s (no success)\n", err, record, server))
       log.Debugf("Error update %s %s %s (no success)\n", err, record, server)
-      time.Sleep(time.Duration(2*retry)*time.Second)
+      time.Sleep(time.Duration(retry)*time.Second)
       continue
     }
     return nil
@@ -367,6 +386,9 @@ func (c *DNSClient) UpdateQueryDNS(client *dns.Client, zone string, record strin
 func (c *DNSClient) UpdateMultiHash(server string) error {
   client := new(dns.Client)
   client.Timeout = 30*time.Second
+  client.ReadTimeout = 30*time.Second
+  client.WriteTimeout = 30*time.Second
+  client.DialTimeout = 30*time.Second
   client.Net = "tcp"
 
   zone := fmt.Sprintf("%s.", c.zone)
@@ -380,7 +402,7 @@ func (c *DNSClient) UpdateMultiHash(server string) error {
     if strings.HasPrefix(addr.String(), "/ip4/172") { // grid5000 specific
       continue
     }
-    record := fmt.Sprintf("%s 300 IN TXT \"%s/ipfs/%s\"", c.site_fqdn, addr.String(), c.self.Pretty())
+    record := fmt.Sprintf("%s 3000 IN TXT \"%s/ipfs/%s\"", c.site_fqdn, addr.String(), c.self.Pretty())
     fmt.Printf("%s\n", record)
     err := c.UpdateQueryDNS(client, zone, record, server)
     if nil != err {
@@ -400,6 +422,9 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   }
   client := new(dns.Client)
   client.Timeout = 30*time.Second
+  client.ReadTimeout = 30*time.Second
+  client.WriteTimeout = 30*time.Second
+  client.DialTimeout = 30*time.Second
   client.Net = "tcp"
 
   zone := fmt.Sprintf("%s.", c.zone)
@@ -421,7 +446,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     } else {
       for _, rrr := range rr {
         dir := rrr.(*dns.A).A.String() 
-        record := fmt.Sprintf("%s. 1 IN A %s", fqdn, dir)
+        record := fmt.Sprintf("%s. 2000 IN A %s", fqdn, dir)
         nb_hops = nb_hops+1
         err := c.UpdateQueryDNS(client, zone, record, last_server)
         if nil != err {
@@ -457,7 +482,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     if false == found {
       fmt.Printf("Additional update\n")
       for _, dir := range dirs {
-        record := fmt.Sprintf("%s. 1 IN A %s", fqdn, dir)
+        record := fmt.Sprintf("%s. 2000 IN A %s", fqdn, dir)
         nb_hops = nb_hops+1
         err := c.UpdateQueryDNS(client, zone, record, last_server)
         if nil != err {
@@ -474,7 +499,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   for 0 != len(servers) {
     server := (servers)[len(servers)-1]
     servers = (servers)[0:len(servers)-1]
-    record := fmt.Sprintf("%s. 1 IN %s %s", fqdn, type_, value)
+    record := fmt.Sprintf("%s. 2000 IN %s %s", fqdn, type_, value)
     nb_hops = nb_hops+1
     err := c.UpdateQueryDNS(client, zone, record, server)
     if nil != err {
@@ -509,6 +534,9 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
 
   client := new(dns.Client)
   client.Timeout = 30*time.Second
+  client.ReadTimeout = 30*time.Second
+  client.WriteTimeout = 30*time.Second
+  client.DialTimeout = 30*time.Second
   client.Net = "tcp"
 
   ipfsnodes, err := c.QueryTXT(client, results[0], path[len(path)-1])
