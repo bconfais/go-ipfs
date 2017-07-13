@@ -35,7 +35,7 @@ var ProtocolDHT protocol.ID = "/ipfs/dht"
 
 // NumBootstrapQueries defines the number of random dht queries to do to
 // collect members of the routing table.
-const NumBootstrapQueries = 5
+const NumBootstrapQueries = 2
 
 // TODO. SEE https://github.com/jbenet/node-ipfs/blob/master/submodules/ipfs-dht/index.js
 

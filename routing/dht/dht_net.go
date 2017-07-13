@@ -28,7 +28,7 @@ func (dht *IpfsDHT) handleNewMessage(s inet.Stream) {
 	ctx := dht.Context()
 	cr := ctxio.NewReader(ctx, s) // ok to use. we defer close stream in this func
 	cw := ctxio.NewWriter(ctx, s) // ok to use. we defer close stream in this func
-	r := ggio.NewDelimitedReader(cr, inet.MessageSizeMax)
+	r := ggio.NewDelimitedReader(cr, inet.MessageSizeMax*5)
 	w := ggio.NewDelimitedWriter(cw)
 	mPeer := s.Conn().RemotePeer()
 

@@ -31,6 +31,9 @@ func NewBlock(data []byte) *BasicBlock {
 }
 
 func NewBlockWithKey(data []byte, key string) *BasicBlock {
+	return &BasicBlock{data: data, multihash: u.Hash([]byte(key))}
+}
+func NewBlockWithKeyAlreadyHashed(data []byte, key string) *BasicBlock {
 	return &BasicBlock{data: data, multihash: []byte(key)}
 }
 

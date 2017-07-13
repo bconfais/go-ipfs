@@ -204,6 +204,15 @@ func (i internalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <- t:
 			return
 		case <-time.After(120*time.Second):
+			node, err := i.ctx.GetNode()
+			if err != nil {
+				s := fmt.Sprintf("cmds/http: couldn't GetNode(): %s", err)
+				http.Error(w, s, http.StatusInternalServerError)
+				return
+			}
+
+			_, cancel := context.WithCancel(node.Context())
+			cancel()
 			s := fmt.Sprintf("cmds/http: timeout")
 			http.Error(w, s, http.StatusInternalServerError)
 			return

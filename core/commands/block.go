@@ -151,10 +151,9 @@ It reads from stdin, and <key> is a base58 encoded multihash.
 			res.SetError(err, cmds.ErrNormal)
 			return
 		}
-		log.Debugf(string(k))
 
 		res.SetOutput(&BlockStat{
-			Key:  string(k), //k.String(),
+			Key:  k.String(),
 			Size: len(data),
 		})
 	},
@@ -173,21 +172,22 @@ func getBlockForKey(req cmds.Request, skey string) (blocks.Block, error) {
 		return nil, err
 	}
 
+/*
 	if !u.IsValidHash(skey) {
 		log.Debugf("Not a valid hash")
 		//return nil, errors.New("Not a valid hash")
 	}
-
+*/
 
 /*
 	h, err := mh.FromB58String(skey)
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf(skey)
 */
+	log.Debugf(skey)
 
-	k := key.Key(skey)
+	k := key.Key(u.Hash([]byte(skey)))
 	b, err := n.Blocks.GetBlock(req.Context(), k)
 	if err != nil {
 		return nil, err

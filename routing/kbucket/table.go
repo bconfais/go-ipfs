@@ -48,6 +48,15 @@ func NewRoutingTable(bucketsize int, localID ID, latency time.Duration, m pstore
 // Update adds or moves the given peer to the front of its respective bucket
 // If a peer gets removed from a bucket, it is returned
 func (rt *RoutingTable) Update(p peer.ID) {
+	fmt.Printf("Routing Table, bs = %d (%d, %d), Max latency = %d\n", rt.bucketsize, rt.Buckets[0].Len(), rt.Size(), rt.maxLatency)
+
+	for i, pp := range rt.Buckets {
+		fmt.Printf("=== Bucket %d ===\n", i);
+		for _, ppp := range pp.Peers() {
+			fmt.Printf("  -> %s\n", ppp);
+		}
+	}
+
 	peerID := ConvertPeerID(p)
 	cpl := commonPrefixLen(peerID, rt.local)
 
@@ -74,6 +83,12 @@ func (rt *RoutingTable) Update(p peer.ID) {
 
 	// New peer, add to bucket
 	bucket.PushFront(p)
+/*
+	if bucket.Len() > rt.bucketsize {
+		bucket.PopBack()
+		return
+	}
+*/
 
 	// Are we past the max bucket size?
 	if bucket.Len() > rt.bucketsize {

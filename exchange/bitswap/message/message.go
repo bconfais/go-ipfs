@@ -81,7 +81,7 @@ func newMessageFromProto(pbm pb.Message) BitSwapMessage {
 	for i, d := range pbm.GetBlocks() {
 		log.Debugf(string(i))
 //		b := blocks.NewBlockWithKey(d, "test123")
-		b := blocks.NewBlockWithKey(d, pbm.GetKeys()[i])
+		b := blocks.NewBlockWithKeyAlreadyHashed(d, pbm.GetKeys()[i])
 		m.AddBlock(b)
 	}
 	return m

@@ -18,6 +18,7 @@ import (
 	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
 	u "gx/ipfs/QmZNVWh8LLjAavuQ2JXuFmuYH3C11xo988vSgp7UQrTRj1/go-ipfs-util"
 	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
+	b58 "gx/ipfs/QmT8rehPR3F6bmwL6zjUN8XpiDBFFpMP2myPdC6ApsWfJf/go-base58"
 )
 
 var maxQueryConcurrency = AlphaValue
@@ -41,7 +42,7 @@ type dhtQueryResult struct {
 func (dht *IpfsDHT) newQuery(k key.Key, f queryFunc) *dhtQuery {
 	ff, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
 	defer ff.Close()
-	ff.WriteString(fmt.Sprintf("query %s\n", string(k)))
+	ff.WriteString(fmt.Sprintf("query %s\n", string(b58.Encode([]byte(k)))))
 	return &dhtQuery{
 		key:         k,
 		dht:         dht,
@@ -158,7 +159,7 @@ func (r *dhtQueryRunner) Run(ctx context.Context, peers []peer.ID) (*dhtQueryRes
 	}
 	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
 	defer f.Close()
-	f.WriteString(fmt.Sprintf("lookup %d hops (%s)\n", r.peersSeen.Size(), string(r.query.key)))
+	f.WriteString(fmt.Sprintf("lookup %d hops %d (%s)\n", r.peersSeen.Size(), r.peersRemaining.Value(), string(b58.Encode([]byte(r.query.key)))))
 
 	if r.result != nil && r.result.success {
 		return r.result, nil
@@ -271,6 +272,9 @@ func (r *dhtQueryRunner) queryPeer(proc process.Process, p peer.ID) {
 	// finally, run the query against this peer
 	res, err := r.query.qfunc(ctx, p)
 
+        f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+        defer f.Close()
+
 	if err != nil {
 		log.Debugf("ERROR worker for: %v %v", p, err)
 		r.Lock()
@@ -287,6 +291,7 @@ func (r *dhtQueryRunner) queryPeer(proc process.Process, p peer.ID) {
 
 	} else if len(res.closerPeers) > 0 {
 		log.Debugf("PEERS CLOSER -- worker for: %v (%d closer peers)", p, len(res.closerPeers))
+		f.WriteString(fmt.Sprintf("PEERS CLOSER -- worker for: %v (%d closer peers)", p, len(res.closerPeers)))
 		for _, next := range res.closerPeers {
 			if next.ID == r.query.dht.self { // dont add self.
 				log.Debugf("PEERS CLOSER -- worker for: %v found self", p)

@@ -20,6 +20,7 @@ import (
 	peer "gx/ipfs/QmRBqJF7hb8ZSpRcMwUt8hNhydWcxGEhtk81HKq6oUwKvs/go-libp2p-peer"
 	inet "gx/ipfs/QmVCe3SNMjkcPgnpFhZs719dheq6xE7gJwjzV7aWcUM4Ms/go-libp2p/p2p/net"
 	context "gx/ipfs/QmZy2y8t9zQH2a1b8q2ZSLKp17ATuJoCNxxyMFG5qFExpt/go-net/context"
+	b58 "gx/ipfs/QmT8rehPR3F6bmwL6zjUN8XpiDBFFpMP2myPdC6ApsWfJf/go-base58"
 )
 
 // asyncQueryBuffer is the size of buffered channels in async queries. This
@@ -314,10 +315,12 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 	defer close(peerOut)
 
 	ps := pset.NewLimited(count)
-	provs := dht.providers.GetProviders(ctx, key)
 	answer := 0
 	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
 	defer f.Close()
+
+/*
+	provs := dht.providers.GetProviders(ctx, key)
 	for _, p := range provs {
 		answer = answer + 1
 		// NOTE: Assuming that this list of peers is unique
@@ -336,7 +339,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 			return
 		}
 	}
-	f.WriteString(fmt.Sprintf("found %d answers (%s)\n", answer, string(key)))
+*/
 
 	// setup the Query
 	parent := ctx
@@ -356,6 +359,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 
 		// Add unique providers from request, up to 'count'
 		for _, prov := range provs {
+			answer = answer + 1
 			log.Debugf("got provider: %s", prov)
 			if ps.TryAdd(prov.ID) {
 				log.Debugf("using provider: %s", prov)
@@ -376,6 +380,11 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 		closer := pmes.GetCloserPeers()
 		clpeers := pb.PBPeersToPeerInfos(closer)
 		log.Debugf("got closer peers: %d %s", len(clpeers), clpeers)
+/*
+		if 0 ==  len(clpeers) {
+			dht.findProvidersAsyncRoutine(ctx, key, count, peerOut)
+		}
+*/
 
 		notif.PublishQueryEvent(parent, &notif.QueryEvent{
 			Type:      notif.PeerResponse,
@@ -384,6 +393,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 		})
 		return &dhtQueryResult{closerPeers: clpeers}, nil
 	})
+	f.WriteString(fmt.Sprintf("found %d answers (%s)\n", answer, string(b58.Encode([]byte(key)))))
 
 	peers := dht.routingTable.NearestPeers(kb.ConvertKey(key), KValue)
 	_, err := query.Run(ctx, peers)

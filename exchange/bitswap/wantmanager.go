@@ -311,11 +311,13 @@ func (pm *WantManager) Run() {
 				var es []*bsmsg.Entry
 				for _, e := range pm.wl.Entries() {
 					if e.Provider == id && false == e.Asked {
+//					if e.Provider == id {
 						e.Asked = true
 						es = append(es, &bsmsg.Entry{Entry: e})
 					}
 					/* keys that are not in the DHT */
 					if e.Provider == "" && 1 == j {
+//					if e.Provider == "" {
 //						e.Asked = true
 //						var a = []key.Key{e.Key}
 //						pm.WantBlocks(pm.ctx,a)
@@ -358,6 +360,9 @@ func (wm *WantManager) newMsgQueue(p peer.ID) *msgQueue {
 }
 
 func (mq *msgQueue) addMessage(entries []*bsmsg.Entry) {
+	if nil == mq {
+		return;
+	}
 	mq.outlk.Lock()
 	defer func() {
 		mq.outlk.Unlock()
