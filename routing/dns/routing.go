@@ -414,12 +414,17 @@ func (c *DNSClient) UpdateMultiHash(server string) error {
 }
 
 func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
+  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+  defer f.Close()
+  f.WriteString(fmt.Sprintf("updating %s %s\n", fqdn, servers))
+/*
   if 1 >= len(servers) {
     f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
     defer f.Close()
     f.WriteString(fmt.Sprintf("no need to update %s\n", fqdn))
     return nil // no need to update only one server that is local to the site
   }
+*/
   client := new(dns.Client)
   client.Timeout = 30*time.Second
   client.ReadTimeout = 30*time.Second
@@ -509,8 +514,10 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     value = server
   }
 
+/*
   f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
   defer f.Close()
+*/
   f.WriteString(fmt.Sprintf("update %d messages (%s)\n", nb_hops, fqdn))
   //ioutil.WriteFile("/tmp/log", fmt.Sprintf("update %d messages (%s)\n", nb_hops, fqdn), 0644)
   return nil
