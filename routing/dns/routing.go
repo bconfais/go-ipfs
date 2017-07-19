@@ -140,6 +140,9 @@ func (c *DNSClient) GetValues(ctx context.Context, k key.Key, nvals int) ([]rout
 }
 
 func (c *DNSClient) Provide(ctx context.Context, k key.Key) error {
+  if (strings.HasPrefix(string(k), "Qm")) {
+    return nil
+  }
   log.Debugf("Provide")
   if false == isASCII(string(k)) {
    k = key.Key(key.B58KeyEncode(k))

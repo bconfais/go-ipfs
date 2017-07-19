@@ -251,6 +251,12 @@ func (pm *WantManager) SetProvForKey(k key.Key, p peer.ID) {
 			filtered = append(filtered, &bsmsg.Entry{Entry: e})
 		}
 	}
+	if nil == pm.peers {
+		return
+	}
+	if nil == pm.peers[p] {
+	        pm.startPeerHandler(p)
+	}
 	pm.peers[p].addMessage(filtered)
 	fmt.Printf("===============\n")
 	for _, e := range filtered {
