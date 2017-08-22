@@ -140,6 +140,7 @@ func (c *DNSClient) GetValues(ctx context.Context, k key.Key, nvals int) ([]rout
 }
 
 func (c *DNSClient) Provide(ctx context.Context, k key.Key) error {
+  start := time.Now()
   if (strings.HasPrefix(string(k), "Qm")) {
     return nil
   }
@@ -161,6 +162,10 @@ func (c *DNSClient) Provide(ctx context.Context, k key.Key) error {
   fmt.Printf("update: %s\n\n", update_nodes)
   c.UpdateDNS(string(k), update_nodes)
 
+  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+  defer f.Close()
+  elapsed := time.Since(start)
+  f.WriteString(fmt.Sprintf("provides took %s (%s)\n", elapsed, string(k)))
   return nil
 }
 
@@ -530,6 +535,7 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
 
 func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan pstore.PeerInfo) error {
   log.Debugf("FindProvidersAsync_")
+  start := time.Now()
   defer close(out)
 
 
@@ -586,6 +592,9 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
   out <- c.peerstore.PeerInfo(pp[i].ID)
 
   ctx.Done()
+  elapsed := time.Since(start)
+  f.WriteString(fmt.Sprintf("findprovidersasync_ took %s (%s)\n", elapsed, string(k)))
+
   return nil
 
 }
