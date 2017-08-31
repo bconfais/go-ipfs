@@ -244,6 +244,7 @@ func (dht *IpfsDHT) GetValues(ctx context.Context, key key.Key, nvals int) ([]ro
 
 // Provide makes this node announce that it can provide a value for the given key
 func (dht *IpfsDHT) Provide(ctx context.Context, key key.Key) error {
+	start := time.Now()
 	defer log.EventBegin(ctx, "provide", &key).Done()
 
 	// add self locally
@@ -272,6 +273,10 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key key.Key) error {
 		}(p)
 	}
 	wg.Wait()
+	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+	defer f.Close()
+	elapsed := time.Since(start)
+	f.WriteString(fmt.Sprintf("provides took %s (%s)\n", elapsed, string(key)))
 	return nil
 }
 func (dht *IpfsDHT) makeProvRecord(skey key.Key) (*pb.Message, error) {
@@ -311,6 +316,7 @@ func (dht *IpfsDHT) FindProvidersAsync(ctx context.Context, key key.Key, count i
 }
 
 func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, count int, peerOut chan pstore.PeerInfo) {
+	start := time.Now()
 	defer log.EventBegin(ctx, "findProvidersAsync", &key).Done()
 	defer close(peerOut)
 
@@ -414,6 +420,10 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 			Extra: err.Error(),
 		})
 	}
+
+	elapsed := time.Since(start)
+	f.WriteString(fmt.Sprintf("findprovidersasync_ took %s (%s)\n", elapsed, string(key)))
+
 }
 
 // FindPeer searches for a peer with given ID.
