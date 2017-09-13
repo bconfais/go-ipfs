@@ -45,6 +45,9 @@ type DNSClient struct {
     sync.RWMutex
     m map[string]string
   }
+  file *os.File
+  file_mutex sync.Mutex
+  
 }
 
 func in_slice(a string, list []string) bool {
@@ -95,13 +98,24 @@ func ConstructDNSRouting(ctx context.Context, h p2phost.Host, d repo.Datastore) 
 
   client.site_fqdn = fmt.Sprintf("%s.%s.", client.site, client.zone)
   client.updates.m = make(map[string]string)
+
+  var err error
+  client.file, err = os.Create("/tmp/log")
+/*
+  client.file, err = os.Open("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+*/
+  if (err != nil) {
+    log.Debugf("Unable to open log file")
+  }
+  client.file_mutex = sync.Mutex{}
+
   return client, nil
 }
 
 func (c *DNSClient) Bootstrap(ctx context.Context) error {
   log.Debugf("Bootstrap")
 
-  result, _, err := c.QueryDNSRecursive(c.site_fqdn, dns.TypeTXT, c.dnsTXT, Top2Bottom)
+  result, _, _, err := c.QueryDNSRecursive(c.site_fqdn, dns.TypeTXT, c.dnsTXT, Top2Bottom)
   if nil != err {
     log.Debugf("DNS lookup failed %s\n", err.Error())
     ctx.Done()
@@ -163,16 +177,17 @@ func (c *DNSClient) Provide(ctx context.Context, k key.Key) error {
   }
 
   servers := c.FindNodesToUpdate(c.updates.m[string(k)])
-  err := c.UpdateDNS(string(k), servers)
+  nb_hops, err := c.UpdateDNS(string(k), servers)
   if err != nil {
    log.Debugf("**** error: %s\n", err.Error())
   }
 
 
-  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-  defer f.Close()
   elapsed := time.Since(start)
-  f.WriteString(fmt.Sprintf("provides took %s (%s)\n", elapsed, string(k)))
+  c.file_mutex.Lock()
+  c.file.WriteString(fmt.Sprintf("provides took %s (%d hops) (%s)\n", elapsed, nb_hops, string(k)))
+  c.file.Sync()
+  c.file_mutex.Unlock()
   return nil
 }
 
@@ -190,7 +205,7 @@ func (c *DNSClient) dnsTXT(rr []dns.RR) ([]string) {
   return results
 }
 
-func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback func([]dns.RR)([]string), direction int) ([]string, string, error) {
+func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback func([]dns.RR)([]string), direction int) ([]string, string, int, error) {
   client := new(dns.Client)
   client.Timeout = 30*time.Second
   client.ReadTimeout = 30*time.Second
@@ -201,9 +216,6 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
   message := new(dns.Msg)
   message.SetQuestion(dns.Fqdn(fqdn), record_type)
   message.RecursionDesired = false
-
-  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-  defer f.Close()
 
   var servers []string // a stack of partial answers
   if Bottom2Top == direction {
@@ -264,7 +276,6 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
     }
     retry = 0
     if 0 != len(r.Answer) {
-      f.WriteString(fmt.Sprintf("found %d answers (%s)\n", len(r.Answer), fqdn))
       fmt.Printf("no answer from %s\n", server)
       results = callback(r.Answer)
       found = true
@@ -273,10 +284,9 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
     }
   }
   if (found == true) {
-    return results, last_server, nil
+    return results, last_server, nb_hops, nil
   }
-  f.WriteString(fmt.Sprintf("lookup %d hops (%s) %s\n", nb_hops, fqdn, trypath))
-  return nil, last_server, errors.New("Value not found in DNS")
+  return nil, last_server, nb_hops, errors.New("Value not found in DNS")
 }
 
 func (c *DNSClient) FindNodesToUpdate(server string) []string {
@@ -313,17 +323,19 @@ func (c *DNSClient) UpdateQueryDNS(clientc *dns.Client, zone string, record stri
     message.Insert(rrs)
     r, _, err := client.Exchange(message, net.JoinHostPort(server, "53"))
     if err != nil {
-      f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-      defer f.Close()
-      f.WriteString(fmt.Sprintf("Error updating %s %s %s (error)\n", err, record, server))
+      c.file_mutex.Lock()
+      c.file.WriteString(fmt.Sprintf("Error updating %s %s %s (error)\n", err, record, server))
+      c.file.Sync()
+      c.file_mutex.Unlock()
       log.Debugf("Error update %s %s %s (error)\n", err, record, server)
       time.Sleep(time.Duration(retry)*time.Second)
       continue
     }
     if r.Rcode != dns.RcodeSuccess {
-      f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-      defer f.Close()
-      f.WriteString(fmt.Sprintf("Error updating %s %s %s (no success)\n", err, record, server))
+      c.file_mutex.Lock()
+      c.file.WriteString(fmt.Sprintf("Error updating %s %s %s (no success)\n", err, record, server))
+      c.file.Sync()
+      c.file_mutex.Unlock()
       log.Debugf("Error update %s %s %s (no success)\n", err, record, server)
       time.Sleep(time.Duration(retry)*time.Second)
       continue
@@ -383,11 +395,7 @@ func (c *DNSClient) UpdateMultiHash(fqdn string, server string) error {
 
 }
 
-func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
-  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-  defer f.Close()
-  f.WriteString(fmt.Sprintf("updating %s %s\n", fqdn, servers))
-
+func (c *DNSClient) UpdateDNS(fqdn string, servers []string) (int, error) {
   client := new(dns.Client)
   client.Timeout = 30*time.Second
   client.ReadTimeout = 30*time.Second
@@ -403,20 +411,16 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
     fmt.Printf("%s\n", err)
    }
   }
-
-  f.WriteString(fmt.Sprintf("update %d messages (%s)\n", nb_hops, fqdn))
-  return nil
+  return nb_hops, nil
 }
 
 
 func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan pstore.PeerInfo) error {
   log.Debugf("FindProvidersAsync_")
-  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-  defer f.Close()
   start := time.Now()
   defer close(out)
 
-  results, last_server, err := c.QueryDNSRecursive(string(k), dns.TypeTXT, c.dnsTXT, Bottom2Top)
+  results, last_server, nb_hops, err := c.QueryDNSRecursive(string(k), dns.TypeTXT, c.dnsTXT, Bottom2Top)
   log.Debugf("last server %s\n", last_server)
   if nil != err {
     log.Debugf("DNS lookup failed\n")
@@ -454,7 +458,11 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
 
   ctx.Done()
   elapsed := time.Since(start)
-  f.WriteString(fmt.Sprintf("findprovidersasync_ took %s (%s)\n", elapsed, string(k)))
+  c.file_mutex.Lock()
+  c.file.WriteString(fmt.Sprintf("findprovidersasync_ took %s (%d hops) (%s)\n", elapsed, nb_hops, string(k)))
+  c.file.Sync()
+  c.file_mutex.Unlock()
+
 
   return nil
 
