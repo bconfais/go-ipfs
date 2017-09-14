@@ -280,6 +280,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
     f.WriteString(fmt.Sprintf("lookup %d hops (%s) %s\n", nb_hops, fqdn, trypath))
     return results, last_server, nil
   }
+  f.WriteString(fmt.Sprintf("lookup error %d Hops (%s) %s\n", nb_hops, fqdn, trypath))
   return nil, last_server, errors.New("Value not found in DNS")
 }
 
