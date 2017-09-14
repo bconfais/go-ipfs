@@ -169,9 +169,9 @@ func (c *DNSClient) Provide(ctx context.Context, k key.Key) error {
   }
 
 
+  elapsed := time.Since(start)
   f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
   defer f.Close()
-  elapsed := time.Since(start)
   f.WriteString(fmt.Sprintf("provides took %s (%s)\n", elapsed, string(k)))
   return nil
 }
@@ -243,10 +243,12 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
       retry = retry +1
       if ( retry < max_retry ) {
        nb_hops = nb_hops - 1
+       servers = append(servers, server)
        log.Debugf("*** retry %d for %s\n", retry, fqdn)
       } else {
        log.Debugf("**** error: %s\n", err.Error())
        log.Debugf("**** We need to try another DNS server\n")
+       retry = 0
       }
       continue
     }
@@ -255,10 +257,12 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
       retry = retry +1
       if ( retry < max_retry ) {
        nb_hops = nb_hops - 1
+       servers = append(servers, server)
        log.Debugf("*** retry %d for %s\n", retry, fqdn)
       } else {
         log.Debugf("**** invalid answer name %s after query for %s\n", fqdn, fqdn)
         log.Debugf("**** Object does not exist, perhaps try another path in the DNS\n");
+        retry = 0
       }
       continue
     }
@@ -273,9 +277,9 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
     }
   }
   if (found == true) {
+    f.WriteString(fmt.Sprintf("lookup %d hops (%s) %s\n", nb_hops, fqdn, trypath))
     return results, last_server, nil
   }
-  f.WriteString(fmt.Sprintf("lookup %d hops (%s) %s\n", nb_hops, fqdn, trypath))
   return nil, last_server, errors.New("Value not found in DNS")
 }
 
@@ -420,6 +424,7 @@ func (c *DNSClient) FindProvidersAsync_(ctx context.Context, k key.Key, out chan
   log.Debugf("last server %s\n", last_server)
   if nil != err {
     log.Debugf("DNS lookup failed\n")
+    f.WriteString(fmt.Sprintf("FindProvidersAsync_ failed (%s)\n", string(k)))
     ctx.Done()
     return errors.New("DNS lookup failed");
   }
