@@ -245,6 +245,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
        nb_hops = nb_hops - 1
        servers = append(servers, server)
        log.Debugf("*** retry %d for %s\n", retry, fqdn)
+//       time.Sleep(time.Duration(retry)*time.Second)
       } else {
        log.Debugf("**** error: %s\n", err.Error())
        log.Debugf("**** We need to try another DNS server\n")
@@ -259,6 +260,7 @@ func (c *DNSClient) QueryDNSRecursive(fqdn string, record_type uint16, callback 
        nb_hops = nb_hops - 1
        servers = append(servers, server)
        log.Debugf("*** retry %d for %s\n", retry, fqdn)
+//       time.Sleep(time.Duration(retry)*time.Second)
       } else {
         log.Debugf("**** invalid answer name %s after query for %s\n", fqdn, fqdn)
         log.Debugf("**** Object does not exist, perhaps try another path in the DNS\n");
@@ -335,6 +337,9 @@ func (c *DNSClient) UpdateQueryDNS(clientc *dns.Client, zone string, record stri
     }
     return nil
   }
+  f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+  defer f.Close()
+  f.WriteString(fmt.Sprintf("Too many errors while updating %s\n",  server))
   return errors.New("Too many errors while updating")
 }
 
