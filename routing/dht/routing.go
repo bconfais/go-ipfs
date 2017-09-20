@@ -276,7 +276,7 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key key.Key) error {
 	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
 	defer f.Close()
 	elapsed := time.Since(start)
-	f.WriteString(fmt.Sprintf("provides took %s (%s)\n", elapsed, string(key)))
+	f.WriteString(fmt.Sprintf("provides took %s (%s)\n", elapsed,  string(b58.Encode([]byte(key)))))
 	return nil
 }
 func (dht *IpfsDHT) makeProvRecord(skey key.Key) (*pb.Message, error) {
@@ -348,6 +348,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 */
 
 	// setup the Query
+	first := true
 	parent := ctx
 	query := dht.newQuery(key, func(ctx context.Context, p peer.ID) (*dhtQueryResult, error) {
 		notif.PublishQueryEvent(parent, &notif.QueryEvent{
@@ -364,6 +365,12 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 		log.Debugf("%d provider entries decoded", len(provs))
 
 		// Add unique providers from request, up to 'count'
+		if (true == first) {
+			first = false;
+			elapsed := time.Since(start)
+			f.WriteString(fmt.Sprintf("findprovidersasync_ took %s (%s)\n", elapsed,  string(b58.Encode([]byte(key)))))
+		}
+
 		for _, prov := range provs {
 			answer = answer + 1
 			log.Debugf("got provider: %s", prov)
@@ -422,7 +429,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 	}
 
 	elapsed := time.Since(start)
-	f.WriteString(fmt.Sprintf("findprovidersasync_ took %s (%s)\n", elapsed, string(key)))
+	f.WriteString(fmt.Sprintf("findprovidersasync_> took %s (%s)\n", elapsed,  string(b58.Encode([]byte(key)))))
 
 }
 
