@@ -4,6 +4,7 @@ import (
 	"sync"
 	"fmt"
 	"os"
+	"time"
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	notif "github.com/ipfs/go-ipfs/notifications"
 	"github.com/ipfs/go-ipfs/routing"
@@ -107,6 +108,9 @@ func newQueryRunner(q *dhtQuery) *dhtQueryRunner {
 func (r *dhtQueryRunner) Run(ctx context.Context, peers []peer.ID) (*dhtQueryResult, error) {
 	r.log = log
 	r.runCtx = ctx
+	start := time.Now()
+	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+	defer f.Close()
 
 	if len(peers) == 0 {
 		log.Warning("Running query with no peers!")
@@ -122,6 +126,9 @@ func (r *dhtQueryRunner) Run(ctx context.Context, peers []peer.ID) (*dhtQueryRes
 	for _, p := range peers {
 		r.addPeerToQuery(p)
 	}
+	elapsed := time.Since(start)
+	f.WriteString(fmt.Sprintf("addpeers to query took %s\n", elapsed))
+
 
 	// go do this thing.
 	// do it as a child proc to make sure Run exits
@@ -143,6 +150,8 @@ func (r *dhtQueryRunner) Run(ctx context.Context, peers []peer.ID) (*dhtQueryRes
 		r.proc.Close()
 		r.RLock()
 		defer r.RUnlock()
+		elapsed := time.Since(start)
+		f.WriteString(fmt.Sprintf("worker find an answer took %s\n", elapsed))
 
 		err = routing.ErrNotFound
 
@@ -156,9 +165,9 @@ func (r *dhtQueryRunner) Run(ctx context.Context, peers []peer.ID) (*dhtQueryRes
 		r.RLock()
 		defer r.RUnlock()
 		err = context.DeadlineExceeded
+		elapsed := time.Since(start)
+		f.WriteString(fmt.Sprintf("error after %s\n", elapsed))
 	}
-	f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-	defer f.Close()
 	f.WriteString(fmt.Sprintf("lookup %d hops %d (%s)\n", r.peersSeen.Size(), r.peersRemaining.Value(), string(b58.Encode([]byte(r.query.key)))))
 
 	if r.result != nil && r.result.success {
@@ -192,6 +201,7 @@ func (r *dhtQueryRunner) addPeerToQuery(next peer.ID) {
 }
 
 func (r *dhtQueryRunner) spawnWorkers(proc process.Process) {
+	start := time.Now()
 	for {
 
 		select {
@@ -207,7 +217,10 @@ func (r *dhtQueryRunner) spawnWorkers(proc process.Process) {
 				if !more {
 					return // channel closed.
 				}
-
+				elapsed := time.Since(start)
+			        f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+			        defer f.Close()
+				f.WriteString(fmt.Sprintf("end of waiting in spawnWorkers %s\n", elapsed))
 				// do it as a child func to make sure Run exits
 				// ONLY AFTER spawn workers has exited.
 				proc.Go(func(proc process.Process) {
@@ -223,6 +236,9 @@ func (r *dhtQueryRunner) spawnWorkers(proc process.Process) {
 }
 
 func (r *dhtQueryRunner) queryPeer(proc process.Process, p peer.ID) {
+	start := time.Now()
+        f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+        defer f.Close()
 	// ok let's do this!
 
 	// create a context from our proc.
@@ -269,11 +285,18 @@ func (r *dhtQueryRunner) queryPeer(proc process.Process, p peer.ID) {
 		log.Debugf("connected. dial success.")
 	}
 
+        elapsed := time.Since(start)
+        f.WriteString(fmt.Sprintf("begin to query after %s\n", elapsed))
+
 	// finally, run the query against this peer
 	res, err := r.query.qfunc(ctx, p)
 
-        f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
-        defer f.Close()
+        elapsed = time.Since(start)
+        f.WriteString(fmt.Sprintf("end query after %s\n", elapsed))
+
+
+//        f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+//        defer f.Close()
 
 	if err != nil {
 		log.Debugf("ERROR worker for: %v %v", p, err)

@@ -8,7 +8,7 @@ import (
 var PoolSize = 1
 
 // K is the maximum number of requests to perform before returning failure.
-var KValue = 1
+var KValue = 3
 
 // Alpha is the concurrency factor for asynchronous requests.
 var AlphaValue = 3000

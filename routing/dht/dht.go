@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
+	"os"
 	key "github.com/ipfs/go-ipfs/blocks/key"
 	routing "github.com/ipfs/go-ipfs/routing"
 	pb "github.com/ipfs/go-ipfs/routing/dht/pb"
@@ -272,9 +272,13 @@ func (dht *IpfsDHT) findPeerSingle(ctx context.Context, p peer.ID, id peer.ID) (
 
 func (dht *IpfsDHT) findProvidersSingle(ctx context.Context, p peer.ID, key key.Key) (*pb.Message, error) {
 	defer log.EventBegin(ctx, "findProvidersSingle", p, &key).Done()
-
+        f, _ := os.OpenFile("/tmp/log", os.O_APPEND|os.O_WRONLY, 0644)
+        defer f.Close()
+	s := time.Now()
 	pmes := pb.NewMessage(pb.Message_GET_PROVIDERS, string(key), 0)
 	resp, err := dht.sendRequest(ctx, p, pmes)
+	ss := time.Since(s)
+	f.WriteString(fmt.Sprintf("sendRequest took %s \n", ss))
 	switch err {
 	case nil:
 		return resp, nil

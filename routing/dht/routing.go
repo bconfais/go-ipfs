@@ -299,7 +299,7 @@ func (dht *IpfsDHT) makeProvRecord(skey key.Key) (*pb.Message, error) {
 // FindProviders searches until the context expires.
 func (dht *IpfsDHT) FindProviders(ctx context.Context, key key.Key) ([]pstore.PeerInfo, error) {
 	var providers []pstore.PeerInfo
-	for p := range dht.FindProvidersAsync(ctx, key, KValue) {
+	for p := range dht.FindProvidersAsync(ctx, key, 1) {
 		providers = append(providers, p)
 	}
 	return providers, nil
@@ -351,6 +351,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 	first := true
 	parent := ctx
 	query := dht.newQuery(key, func(ctx context.Context, p peer.ID) (*dhtQueryResult, error) {
+		s := time.Now()
 		notif.PublishQueryEvent(parent, &notif.QueryEvent{
 			Type: notif.SendingQuery,
 			ID:   p,
@@ -359,12 +360,14 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 		if err != nil {
 			return nil, err
 		}
+		ss := time.Since(s)
+		f.WriteString(fmt.Sprintf("findproviderssingle took %s \n", ss))
+		
 
 		log.Debugf("%d provider entries", len(pmes.GetProviderPeers()))
 		provs := pb.PBPeersToPeerInfos(pmes.GetProviderPeers())
 		log.Debugf("%d provider entries decoded", len(provs))
 
-		// Add unique providers from request, up to 'count'
 		if (true == first) {
 			first = false;
 			elapsed := time.Since(start)
@@ -372,6 +375,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 		}
 
 		for _, prov := range provs {
+		// Add unique providers from request, up to 'count'
 			answer = answer + 1
 			log.Debugf("got provider: %s", prov)
 			if ps.TryAdd(prov.ID) {
@@ -388,6 +392,8 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 				return &dhtQueryResult{success: true}, nil
 			}
 		}
+
+		return &dhtQueryResult{success: true}, nil
 
 		// Give closer peers back to the query to be queried
 		closer := pmes.GetCloserPeers()
@@ -408,7 +414,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key key.Key, 
 	})
 	f.WriteString(fmt.Sprintf("found %d answers (%s)\n", answer, string(b58.Encode([]byte(key)))))
 
-	peers := dht.routingTable.NearestPeers(kb.ConvertKey(key), KValue)
+	peers := dht.routingTable.NearestPeers(kb.ConvertKey(key), 1)
 	_, err := query.Run(ctx, peers)
 	if err != nil {
 		log.Debugf("Query error: %s", err)
