@@ -398,13 +398,6 @@ func (c *DNSClient) UpdateDNS(fqdn string, servers []string) error {
   defer f.Close()
   f.WriteString(fmt.Sprintf("updating %s %s\n", fqdn, servers))
 
-  client := new(dns.Client)
-  client.Timeout = 30*time.Second
-  client.ReadTimeout = 30*time.Second
-  client.WriteTimeout = 30*time.Second
-  client.DialTimeout = 30*time.Second
-  client.Net = "tcp"
-
   nb_hops := 0
   for _, server := range servers {
    nb_hops = nb_hops + 1
